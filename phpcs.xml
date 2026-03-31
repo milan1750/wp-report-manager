@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<ruleset name="Simple Report Manager Plugin">
+
+    <!-- WordPress coding standards -->
+    <rule ref="WordPress-Core" />
+    <rule ref="WordPress-Extra" />
+    <rule ref="WordPress-Docs" />
+
+    <!-- Apply rules to src/ folder -->
+    <file>./src</file>
+
+    <!-- Exclude vendor folder -->
+    <exclude-pattern>vendor/*</exclude-pattern>
+
+    <!-- Disable file name checks for all src/ files -->
+    <rule ref="WordPress.Files.FileName.NotHyphenatedLowercase" severity="0">
+        <exclude-pattern>includes/*.php</exclude-pattern>
+    </rule>
+    <rule ref="WordPress.Files.FileName.InvalidClassFileName" severity="0">
+        <exclude-pattern>includes/*.php</exclude-pattern>
+    </rule>
+</ruleset>

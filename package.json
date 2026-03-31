@@ -1,0 +1,20 @@
+{
+	"name": "wp-reports-manager",
+	"version": "1.0.0",
+	"private": true,
+	"scripts": {
+		"start": "wp-scripts start --output-path=build",
+		"build": "wp-scripts build --output-path=build"
+	},
+	"devDependencies": {
+		"@wordpress/scripts": "^27.0.0",
+		"sass": "^1.64.0"
+	},
+	"dependencies": {
+		"@tinymce/tinymce-react": "^6.3.0",
+		"jspdf": "^4.2.1",
+		"jspdf-autotable": "^5.0.7",
+		"react-quill": "^2.0.0",
+		"xlsx": "^0.18.5"
+	}
+}
