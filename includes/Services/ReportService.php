@@ -6,6 +6,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+
 class ReportService {
 
 	public static function meta() {
@@ -59,16 +60,29 @@ class ReportService {
 
 		$allowed_sites = array();
 		$site_name_map = array();
+		$access        = wpac()->access();
+		$user_id       = get_current_user_id();
 
 		foreach ( $all_sites as $s ) {
+			// Filter by requested entity/site.
 			if ( $entity !== 'all' && $s['entity_id'] != $entity ) {
 				continue;
 			}
-			if ( $site !== 'all' && $s['id'] != $site ) {
+			if ( $site !== 'all' && $s['site_id'] != $site ) {
 				continue;
 			}
 
-			$allowed_sites[] = $s['site_id'];
+			// ENTRY-LEVEL CAPABILITY CHECK per site/entity.
+			$context = array(
+				'entity_id' => $s['entity_id'],
+				'site_id'   => $s['id'],
+			);
+
+			if ( ! $access->can( 'wrm_view_sales_report', $context ) ) {
+				continue; // skip sites the user cannot access.
+			}
+
+			$allowed_sites[] = $s['id'];
 
 			$entity_name                    = $entity_map[ $s['entity_id'] ] ?? '';
 			$ent_short                      = explode( ' ', trim( $entity_name ) )[0] ?? '';
@@ -92,19 +106,19 @@ class ReportService {
 			return $wpdb->get_results(
 				$wpdb->prepare(
 					"
-			SELECT
-				site_id,
-				site_title,
-				SUM(CAST(total AS DECIMAL(10,2))) as gross,
-				SUM(CAST(subtotal - discounts AS DECIMAL(10,2))) as net,
-				SUM(CAST(tax AS DECIMAL(10,2))) as vat,
-				SUM(CAST(service_charge AS DECIMAL(10,2))) as gratuity,
-				SUM(CAST(discretionary AS DECIMAL(10,2))) as discretionary
-			FROM $t
-			WHERE complete_datetime BETWEEN %s AND %s
-			$where_sites
-			GROUP BY site_id, site_title
-			",
+                SELECT
+                    site_id,
+                    site_title,
+                    SUM(CAST(total AS DECIMAL(10,2))) as gross,
+                    SUM(CAST(subtotal - discounts AS DECIMAL(10,2))) as net,
+                    SUM(CAST(tax AS DECIMAL(10,2))) as vat,
+                    SUM(CAST(service_charge AS DECIMAL(10,2))) as gratuity,
+                    SUM(CAST(discretionary AS DECIMAL(10,2))) as discretionary
+                FROM $t
+                WHERE complete_datetime BETWEEN %s AND %s
+                $where_sites
+                GROUP BY site_id, site_title
+                ",
 					$start,
 					$end
 				),
@@ -164,15 +178,15 @@ class ReportService {
 			return $wpdb->get_results(
 				$wpdb->prepare(
 					"
-			SELECT
-				DAYOFWEEK(complete_datetime)-1 as d,
-				SUM(CAST(total AS DECIMAL(10,2))) as gross,
-				SUM(CAST(subtotal - discounts AS DECIMAL(10,2))) as net
-			FROM $t
-			WHERE complete_datetime BETWEEN %s AND %s
-			$where_sites
-			GROUP BY d
-			",
+                SELECT
+                    DAYOFWEEK(complete_datetime)-1 as d,
+                    SUM(CAST(total AS DECIMAL(10,2))) as gross,
+                    SUM(CAST(subtotal - discounts AS DECIMAL(10,2))) as net
+                FROM $t
+                WHERE complete_datetime BETWEEN %s AND %s
+                $where_sites
+                GROUP BY d
+                ",
 					$start,
 					$end
 				),
@@ -214,9 +228,6 @@ class ReportService {
 			);
 		}
 
-		// =========================
-		// RETURN FINAL RESPONSE
-		// =========================
 		return array(
 			'sites' => array_values( $sites ),
 			'days'  => array_values( $days ),

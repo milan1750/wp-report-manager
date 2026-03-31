@@ -88,43 +88,17 @@ add_action(
 				add_filter(
 					'wpac_get_capabilities',
 					function ( $caps ) {
-						$caps['view_report']   = array(
-							'label'  => 'View Reports',
+						$caps['wrm_view_sales_report']   = array(
+							'label'  => 'View Sales Report',
 							'module' => 'report',
 						);
-						$caps['create_report'] = array(
-							'label'  => 'Create Reports',
+						$caps['wrm_view_item_report']    = array(
+							'label'  => 'View Items Report',
 							'module' => 'report',
 						);
-						$caps['update_report'] = array(
-							'label'  => 'Update Reports',
+						$caps['wrm_view_payment_report'] = array(
+							'label'  => 'View Payments Report',
 							'module' => 'report',
-						);
-						$caps['delete_report'] = array(
-							'label'  => 'Delete Reports',
-							'module' => 'report',
-						);
-						return $caps;
-					}
-				);
-				add_filter(
-					'wpac_get_capabilities',
-					function ( $caps ) {
-						$caps['view_barcode']   = array(
-							'label'  => 'View Barcode',
-							'module' => 'barcode',
-						);
-						$caps['create_barcode'] = array(
-							'label'  => 'Create Barcode',
-							'module' => 'barcode',
-						);
-						$caps['update_barcode'] = array(
-							'label'  => 'Update Barcode',
-							'module' => 'barcode',
-						);
-						$caps['delete_barcode'] = array(
-							'label'  => 'Delete Barcode',
-							'module' => 'barcode',
 						);
 						return $caps;
 					}
@@ -163,3 +137,20 @@ function wrm_deactivate(): void {
 }
 
 register_deactivation_hook( __FILE__, 'wrm_deactivate' );
+
+add_filter(
+	'wpac_get_registered_apps',
+	function ( $apps ) {
+		$apps[] = array(
+			'slug' => 'barcode',
+			'name' => 'Barcode',
+			'icon' => plugin_dir_url( __FILE__ ) . 'assets/images/barcode.png',
+		);
+		$apps[] = array(
+			'slug' => 'report',
+			'name' => 'Report',
+			'icon' => plugin_dir_url( __FILE__ ) . 'assets/images/report.png',
+		);
+		return $apps;
+	}
+);
