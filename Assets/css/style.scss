@@ -12,6 +12,7 @@ body {
     sans-serif;
   background: #f6f7fb;
   color: #111827;
+  height: 95vh;
 }
 
 /* =========================
@@ -19,7 +20,6 @@ body {
 ========================= */
 .wrm-layout {
   display: flex;
-  height: 100vh;
   overflow: hidden;
 }
 
@@ -27,7 +27,7 @@ body {
    SIDEBAR
 ========================= */
 .wrm-sidebar {
-  width: 260px;
+  width: 200px;
   background: #ffffff;
   border-right: 1px solid #e5e7eb;
   padding: 16px;
@@ -456,4 +456,38 @@ body {
 #wrm-progress-bar {
   transition: width 0.3s ease;
   font-weight: bold;
+}
+
+.skeleton {
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  min-height: 20px;
+  margin-bottom: 8px;
+}
+
+.skeleton-chart {
+  height: 250px;
+  background-color: #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.skeleton-table {
+  height: 200px;
+  background-color: #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.skeleton-insights {
+  height: 50px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+}
+
+.skeleton-table {
+  height: 250px;
+  background-color: #e0e0e0;
+  border-radius: 8px;
+  margin: 16px 0;
 }

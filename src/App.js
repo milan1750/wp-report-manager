@@ -6,6 +6,7 @@ import FilterBar from "./ui/FilterBar";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Sales from "./pages/Sales";
+import Data from "./pages/Data";
 
 export const FilterContext = createContext();
 
@@ -32,8 +33,8 @@ export default function App() {
 
           <div className="wrm-content">
             {page === "dashboard" && <Dashboard />}
-            {page === "transactions" && <Transactions />}
             {page === "sales" && <Sales />}
+            {page === "data" && <Data />}
           </div>
 
         </div>

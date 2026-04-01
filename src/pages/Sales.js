@@ -35,7 +35,6 @@ export default function Sales() {
         setDays(data?.days || []);
       })
       .finally(() => setLoading(false));
-
   }, [filters.from, filters.to, filters.entity, filters.site]);
 
   // =========================
@@ -43,11 +42,9 @@ export default function Sales() {
   // =========================
   const money = (v) => Number(v || 0).toFixed(2);
 
-  const variancePct = (c = 0, p = 0) =>
-    p ? ((c - p) / p) * 100 : 0;
+  const variancePct = (c = 0, p = 0) => (p ? ((c - p) / p) * 100 : 0);
 
-  const vatPct = (vat = 0, gross = 0) =>
-    gross ? (vat / gross) * 100 : 0;
+  const vatPct = (vat = 0, gross = 0) => (gross ? (vat / gross) * 100 : 0);
 
   const getVarClass = (v) => {
     if (v < 0) return "var-red";
@@ -60,7 +57,6 @@ export default function Sales() {
   // EXPORT EXCEL
   // =========================
   const exportExcel = () => {
-
     const siteSheet = sites.map((s) => ({
       Site: s.site,
       Net_Current: s.this.net,
@@ -84,19 +80,8 @@ export default function Sales() {
     }));
 
     const wb = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(siteSheet),
-      "Sites"
-    );
-
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(daySheet),
-      "Days"
-    );
-
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteSheet), "Sites");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(daySheet), "Days");
     XLSX.writeFile(wb, "sales-report.xlsx");
   };
 
@@ -104,26 +89,12 @@ export default function Sales() {
   // EXPORT PDF
   // =========================
   const exportPDF = () => {
-
     const doc = new jsPDF();
 
     doc.text("Sales Report - Sites", 14, 10);
-
     autoTable(doc, {
       startY: 15,
-      head: [
-        [
-          "Site",
-          "Net C",
-          "Net P",
-          "Net Var%",
-          "Gross C",
-          "Gross P",
-          "Gross Var%",
-          "VAT",
-          "VAT%",
-        ],
-      ],
+      head: [["Site","Net C","Net P","Net Var%","Gross C","Gross P","Gross Var%","VAT","VAT%"]],
       body: sites.map((s) => [
         s.site,
         money(s.this.net),
@@ -138,12 +109,10 @@ export default function Sales() {
     });
 
     doc.addPage();
-
     doc.text("Sales Report - Days", 14, 10);
-
     autoTable(doc, {
       startY: 15,
-      head: [["Day", "Net C", "Net P", "Net Var%", "Gross C", "Gross P", "Gross Var%"]],
+      head: [["Day","Net C","Net P","Net Var%","Gross C","Gross P","Gross Var%"]],
       body: days.map((d) => [
         d.day,
         money(d.this.net),
@@ -159,13 +128,20 @@ export default function Sales() {
   };
 
   // =========================
-  // STATES
+  // SKELETON LOADING
   // =========================
-
   if (loading) {
-    return <div className="loading">Loading sales report...</div>;
+    return (
+      <div className="sales-page">
+        <div className="skeleton-table" />
+        <div className="skeleton-table" />
+      </div>
+    );
   }
 
+  // =========================
+  // EMPTY STATE
+  // =========================
   if (!sites.length && !days.length) {
     return (
       <div className="empty-state">
@@ -177,18 +153,14 @@ export default function Sales() {
   // =========================
   // UI
   // =========================
-
   return (
     <div className="sales-page">
-
       <div className="header-bar">
         <h1 className="page-title">Sales Report</h1>
-
         <div className="export-buttons">
           <button onClick={exportExcel} disabled={!sites.length}>
             Export Excel
           </button>
-
           <button onClick={exportPDF} disabled={!sites.length}>
             Export PDF
           </button>
@@ -196,107 +168,85 @@ export default function Sales() {
       </div>
 
       {/* SITE TABLE */}
-      <div className="table-card">
+      {sites.length > 0 && (
+        <div className="table-card">
+          <h2>Site Performance</h2>
+          <table className="wrm-table">
+            <thead>
+              <tr>
+                <th>Site</th>
+                <th>Net C</th>
+                <th>Net P</th>
+                <th>Net Var%</th>
+                <th>Gross C</th>
+                <th>Gross P</th>
+                <th>Gross Var%</th>
+                <th>VAT</th>
+                <th>VAT%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sites.map((s, i) => {
+                const netVar = variancePct(s.this.net, s.last.net);
+                const grossVar = variancePct(s.this.gross, s.last.gross);
+                const vatP = vatPct(s.this.vat, s.this.gross);
 
-        <h2>Site Performance</h2>
-
-        <table className="wrm-table">
-
-          <thead>
-            <tr>
-              <th>Site</th>
-              <th>Net C</th>
-              <th>Net P</th>
-              <th>Net Var%</th>
-              <th>Gross C</th>
-              <th>Gross P</th>
-              <th>Gross Var%</th>
-              <th>VAT</th>
-              <th>VAT%</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {sites.map((s, i) => {
-
-              const netVar = variancePct(s.this.net, s.last.net);
-              const grossVar = variancePct(s.this.gross, s.last.gross);
-              const vatP = vatPct(s.this.vat, s.this.gross);
-
-              return (
-                <tr key={i}>
-                  <td>{s.site}</td>
-
-                  <td>{money(s.this.net)}</td>
-                  <td>{money(s.last.net)}</td>
-                  <td className={getVarClass(netVar)}>
-                    {netVar.toFixed(1)}%
-                  </td>
-
-                  <td>{money(s.this.gross)}</td>
-                  <td>{money(s.last.gross)}</td>
-                  <td className={getVarClass(grossVar)}>
-                    {grossVar.toFixed(1)}%
-                  </td>
-
-                  <td>{money(s.this.vat)}</td>
-                  <td>{vatP.toFixed(2)}%</td>
-                </tr>
-              );
-            })}
-          </tbody>
-
-        </table>
-      </div>
+                return (
+                  <tr key={i}>
+                    <td>{s.site}</td>
+                    <td>{money(s.this.net)}</td>
+                    <td>{money(s.last.net)}</td>
+                    <td className={getVarClass(netVar)}>{netVar.toFixed(1)}%</td>
+                    <td>{money(s.this.gross)}</td>
+                    <td>{money(s.last.gross)}</td>
+                    <td className={getVarClass(grossVar)}>{grossVar.toFixed(1)}%</td>
+                    <td>{money(s.this.vat)}</td>
+                    <td>{vatP.toFixed(2)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* DAY TABLE */}
-      <div className="table-card">
+      {days.length > 0 && (
+        <div className="table-card">
+          <h2>Day Performance</h2>
+          <table className="wrm-table">
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Net C</th>
+                <th>Net P</th>
+                <th>Net Var%</th>
+                <th>Gross C</th>
+                <th>Gross P</th>
+                <th>Gross Var%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {days.map((d, i) => {
+                const netVar = variancePct(d.this.net, d.last.net);
+                const grossVar = variancePct(d.this.gross, d.last.gross);
 
-        <h2>Day Performance</h2>
-
-        <table className="wrm-table">
-
-          <thead>
-            <tr>
-              <th>Day</th>
-              <th>Net C</th>
-              <th>Net P</th>
-              <th>Net Var%</th>
-              <th>Gross C</th>
-              <th>Gross P</th>
-              <th>Gross Var%</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {days.map((d, i) => {
-
-              const netVar = variancePct(d.this.net, d.last.net);
-              const grossVar = variancePct(d.this.gross, d.last.gross);
-
-              return (
-                <tr key={i}>
-                  <td>{d.day}</td>
-
-                  <td>{money(d.this.net)}</td>
-                  <td>{money(d.last.net)}</td>
-                  <td className={getVarClass(netVar)}>
-                    {netVar.toFixed(1)}%
-                  </td>
-
-                  <td>{money(d.this.gross)}</td>
-                  <td>{money(d.last.gross)}</td>
-                  <td className={getVarClass(grossVar)}>
-                    {grossVar.toFixed(1)}%
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-
-        </table>
-      </div>
-
+                return (
+                  <tr key={i}>
+                    <td>{d.day}</td>
+                    <td>{money(d.this.net)}</td>
+                    <td>{money(d.last.net)}</td>
+                    <td className={getVarClass(netVar)}>{netVar.toFixed(1)}%</td>
+                    <td>{money(d.this.gross)}</td>
+                    <td>{money(d.last.gross)}</td>
+                    <td className={getVarClass(grossVar)}>{grossVar.toFixed(1)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

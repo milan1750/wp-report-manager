@@ -206,14 +206,11 @@ class Data {
 	 * - Service Charges
 	 * - Total Bill
 	 *
-	 * @param \WP_REST_Request $request REST request containing the uploaded file.
-	 *
 	 * @since 1.0.0
 	 *
 	 * @return array Import result with counts of inserted and skipped rows.
 	 */
 	public static function import_touchbistro( $request ) {
-		error_log( 'TB import started' );
 
 		if ( empty( $_FILES['file']['tmp_name'] ) ) {
 			return array(
@@ -294,15 +291,15 @@ class Data {
 
 			// // Prevent duplicates
 			// $exists = $wpdb->get_var(
-			// 	$wpdb->prepare(
-			// 		"SELECT id FROM $table WHERE transaction_id = %s",
-			// 		$transaction_id
-			// 	)
+			// $wpdb->prepare(
+			// "SELECT id FROM $table WHERE transaction_id = %s",
+			// $transaction_id
+			// )
 			// );
 
 			// if ( $exists ) {
-			// 	++$skipped;
-			// 	continue;
+			// ++$skipped;
+			// continue;
 			// }
 
 			// -------------------
@@ -321,9 +318,9 @@ class Data {
 			$discounts      = floatval( $row['discount revenue'] ?? 0 );
 			$payment_total  = floatval( $row['payment total'] ?? 0 );
 
-			$subtotal      = $sales + $discounts; // subtotal includes discount
-			$total         = $sales + $tax + $service_charge; // Total = Sales + Tax + Service
-			$discretionary = $payment_total - $total; // Extra payment difference
+			$subtotal = $sales + $discounts; // subtotal includes discount
+			$total    = $sales + $tax + $service_charge; // Total = Sales + Tax + Service
+			$gratuity = $payment_total - $total; // Extra payment difference
 
 			// -------------------
 			// Eat In / Takeout
@@ -364,7 +361,7 @@ class Data {
 					'tax'               => $tax,
 					'service_charge'    => $service_charge,
 					'total'             => $payment_total,
-					'discretionary'     => $discretionary,
+					'gratuity'          => $gratuity,
 					'eat_in'            => $eat_in,
 					'complete'          => 1,
 					'canceled'          => 0,

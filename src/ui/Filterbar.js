@@ -57,6 +57,8 @@ export default function FilterBar() {
       .finally(() => setLoading(false));
   }, []);
 
+	console.log(window.WRM_API);
+
   // =========================
   // FILTER SITES BY ENTITY
   // =========================

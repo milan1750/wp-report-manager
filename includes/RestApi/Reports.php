@@ -11,11 +11,13 @@ class Reports {
 		// DASHBOARD
 		register_rest_route(
 			$ns,
-			'/dashboard',
+			'reports/dashboard',
 			array(
 				'methods'             => 'GET',
-				'callback'            => array( Dashboard::class, 'index' ),
-				'permission_callback' => array( self::class, 'dashboard_permissions' ),
+				'callback'            => array( ReportService::class, 'dashboard' ),
+				'permission_callback' => function ( $request ) {
+					return self::permission_check( $request, 'wrm_view_dashboard_report' );
+				},
 			)
 		);
 

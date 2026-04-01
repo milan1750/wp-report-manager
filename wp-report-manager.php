@@ -14,6 +14,13 @@
 defined( 'ABSPATH' ) || exit;
 
 
+
+
+
+
+
+
+
 /**
  * ------------------------------------------------------------------------
  * PLUGIN CONSTANTS
@@ -88,6 +95,10 @@ add_action(
 				add_filter(
 					'wpac_get_capabilities',
 					function ( $caps ) {
+						$caps['wrm_view_dashboard_report']   = array(
+							'label'  => 'View Dashboard Report',
+							'module' => 'report',
+						);
 						$caps['wrm_view_sales_report']   = array(
 							'label'  => 'View Sales Report',
 							'module' => 'report',

@@ -33,18 +33,17 @@ class Plugin {
 			10,
 			1
 		);
-		add_action( 'wpac_render_app_report', [self::class, 'wp_report_manager_render_app'] );
+		add_action( 'wpac_render_app_report', array( self::class, 'wp_report_manager_render_app' ) );
 		add_action( 'admin_menu', array( self::class, 'register_menu' ) );
 		add_action( 'wp_enqueue_scripts', array( self::class, 'scripts' ) );
-
 	}
 
 
 	public static function wp_report_manager_render_app() {
-	    ?>
-	    <div id="wrm-root">
-	    </div> <!-- React app will mount here -->
-	    <?php
+		?>
+		<div id="wrm-root">
+		</div> <!-- React app will mount here -->
+		<?php
 	}
 	/**
 	 * Plugin Page.
@@ -116,37 +115,64 @@ class Plugin {
 	 *
 	 * @param  string $hook Current admin page hook.
 	 */
-	public static function scripts() {
-	    // Get the current app from URL
-	    $current_app = isset($_GET['app']) ? sanitize_text_field($_GET['app']) : '';
+	public static function scripts( $hook ) {
+		// Get the current app from URL.
+		$current_app = isset( $_GET['app'] ) ? sanitize_text_field( $_GET['app'] ) : '';
 
-	    // Only enqueue for the "report" app
-	    if ( $current_app === 'report' ) {
-	        wp_enqueue_script(
-	            'wrm-script',
-	            plugin_dir_url(__DIR__) . 'build/index.js',
-	            ['wp-element'], // WordPress React & ReactDOM
-	            filemtime(plugin_dir_path(__DIR__) . 'build/index.js'),
-	            true
-	        );
+		// Only enqueue for the "report" app
+		if ( $current_app === 'report' ) {
+			wp_enqueue_script(
+				'wrm-script',
+				plugin_dir_url( __DIR__ ) . 'build/index.js',
+				array( 'wp-element' ), // WordPress React & ReactDOM
+				filemtime( plugin_dir_path( __DIR__ ) . 'build/index.js' ),
+				true
+			);
 
-	        wp_enqueue_style(
-	            'wrm-style',
-	            plugin_dir_url(__DIR__) . 'build/style-index.css',
-	            [],
-	            filemtime(plugin_dir_path(__DIR__) . 'build/style-index.css')
-	        );
+			wp_enqueue_style(
+				'wrm-style',
+				plugin_dir_url( __DIR__ ) . 'build/style-index.css',
+				array(),
+				filemtime( plugin_dir_path( __DIR__ ) . 'build/style-index.css' )
+			);
 
-	        // Pass REST API info
-	        wp_localize_script(
-	            'wrm-script',
-	            'WRM_API',
-	            [
-	                'url'   => rest_url('wrm/v1/'),
-	                'nonce' => wp_create_nonce('wp_rest'),
-	            ]
-	        );
-	    }
+			// Pass REST API info
+			wp_localize_script(
+				'wrm-script',
+				'WRM_API',
+				array(
+					'url'      => rest_url( 'wrm/v1/' ),
+					'nonce'    => wp_create_nonce( 'wp_rest' ),
+					'entities' => wpac()->entities()->get_all(),
+					'sites'    => wpac()->sites()->get_all(),
+				)
+			);
+		} elseif ( 'report-manager_page_report-manager-data' === $hook ) {
+				wp_enqueue_script( 'jquery' ); // important.
+				wp_enqueue_script(
+					'wrm-script',
+					WRM_PLUGIN_URL . 'assets/js/admin.js',
+					array( 'jquery' ),
+					WRM_VERSION,
+					true
+				);
+				wp_enqueue_style(
+					'wrm-style',
+					plugin_dir_url( __DIR__ ) . 'build/style-index.css',
+					array(),
+					filemtime( plugin_dir_path( __DIR__ ) . 'build/style-index.css' )
+				);
+				wp_localize_script(
+					'wrm-script',
+					'WRM_API',
+					array(
+						'url'      => rest_url( 'wrm/v1/' ),
+						'nonce'    => wp_create_nonce( 'wp_rest' ),
+						'entities' => wpac()->entities()->get_all(),
+						'sites'    => wpac()->sites()->get_all(),
+					)
+				);
+		}
 	}
 
 	/**

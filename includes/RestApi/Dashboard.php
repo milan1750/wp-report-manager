@@ -8,6 +8,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class Dashboard {
 
+	public static function register( $ns ) {
+	}
+
+
+
 	public static function index( $request ) {
 
 		global $wpdb;

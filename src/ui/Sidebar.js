@@ -24,17 +24,10 @@ export default function Sidebar({ page, setPage }) {
         </button>
 
         <button
-          className={page === "transactions" ? "active" : ""}
-          onClick={() => setPage("transactions")}
+          className={page === "data" ? "active" : ""}
+          onClick={() => setPage("data")}
         >
-          🧾 Transactions
-        </button>
-
-        <button
-          className={page === "transactions" ? "active" : ""}
-          onClick={() => setPage("transactions")}
-        >
-          🧾 Transactions
+          🧾 Data
         </button>
 
       </nav>

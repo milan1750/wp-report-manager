@@ -50,8 +50,8 @@ class Tables {
         discounts DECIMAL(10,2),
         tax DECIMAL(10,2),
         service_charge DECIMAL(10,2),
-        discretionary DECIMAL(10,2),
         total DECIMAL(10,2),
+				gratuity DECIMAL(10,2),
         order_ref VARCHAR(100),
         order_ref2 VARCHAR(100),
         table_number VARCHAR(20),
@@ -65,6 +65,7 @@ class Tables {
         KEY idx_complete_datetime (complete_datetime),
         KEY idx_clerk_id (clerk_id),
         KEY idx_site_date (site_id, complete_date)
+
     ) $charset_collate;";
 		dbDelta( $sql );
 
