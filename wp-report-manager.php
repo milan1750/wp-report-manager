@@ -14,13 +14,6 @@
 defined( 'ABSPATH' ) || exit;
 
 
-
-
-
-
-
-
-
 /**
  * ------------------------------------------------------------------------
  * PLUGIN CONSTANTS
@@ -72,51 +65,10 @@ add_action(
 	'wpac_plugin_loaded',
 	function () {
 
-		// 2. Ensure main plugin class exists before initializing
+		// Ensure main plugin class exists before initializing.
 		if ( ! class_exists( \WRM\Plugin::class ) ) {
 			return;
 		}
-
-		add_action(
-			'init',
-			function () {
-
-				\WPAC\Core\PermissionRegistry::register_module(
-					'report',
-					array(
-						'view',
-						'create',
-						'update',
-						'delete',
-					),
-					'Reports'
-				);
-
-				add_filter(
-					'wpac_get_capabilities',
-					function ( $caps ) {
-						$caps['wrm_view_dashboard_report']   = array(
-							'label'  => 'View Dashboard Report',
-							'module' => 'report',
-						);
-						$caps['wrm_view_sales_report']   = array(
-							'label'  => 'View Sales Report',
-							'module' => 'report',
-						);
-						$caps['wrm_view_item_report']    = array(
-							'label'  => 'View Items Report',
-							'module' => 'report',
-						);
-						$caps['wrm_view_payment_report'] = array(
-							'label'  => 'View Payments Report',
-							'module' => 'report',
-						);
-						return $caps;
-					}
-				);
-			}
-		);
-
 		// Optional global reference for backward compatibility.
 		$GLOBALS['wrm'] = \WRM\Plugin::init();
 		do_action( 'wrm_plugin_loaded' );
@@ -143,25 +95,8 @@ register_activation_hook( __FILE__, 'wrm_activate' );
  */
 function wrm_deactivate(): void {
 	if ( class_exists( \WRM\Plugin::class ) ) {
-		// \WRM\Plugin::deactivate();
+		\WRM\Plugin::deactivate();
 	}
 }
 
 register_deactivation_hook( __FILE__, 'wrm_deactivate' );
-
-add_filter(
-	'wpac_get_registered_apps',
-	function ( $apps ) {
-		$apps[] = array(
-			'slug' => 'barcode',
-			'name' => 'Barcode',
-			'icon' => plugin_dir_url( __FILE__ ) . 'assets/images/barcode.png',
-		);
-		$apps[] = array(
-			'slug' => 'report',
-			'name' => 'Report',
-			'icon' => plugin_dir_url( __FILE__ ) . 'assets/images/report.png',
-		);
-		return $apps;
-	}
-);

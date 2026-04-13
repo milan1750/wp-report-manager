@@ -24,9 +24,9 @@ class ReportService {
 		$out = array();
 
 		foreach ( $sites as $s ) {
-			$out[ $s['company'] ][] = array(
-				'id'   => (int) $s['site_id'],
-				'name' => $s['site_name'],
+			$out[ $s->company ][] = array(
+				'id'   => (int) $s->site_id,
+				'name' => $s->site_name,
 			);
 		}
 
@@ -50,43 +50,41 @@ class ReportService {
 		// =========================
 		// LOAD ENTITIES & SITES
 		// =========================
-		$entities  = wpac()->entities()->get_all( true );
-		$all_sites = wpac()->sites()->get_all( true );
+		$entities  = wpac()->entities()->all();
+		$all_sites = wpac()->sites()->all();
 
 		$entity_map = array();
 		foreach ( $entities as $e ) {
-			$entity_map[ $e['id'] ] = $e['name'];
+			$entity_map[ $e->id ] = $e->name;
 		}
 
 		$allowed_sites = array();
 		$site_name_map = array();
-		$access        = wpac()->access();
+		$permissions   = wpac()->permissions();
 		$user_id       = get_current_user_id();
 
 		foreach ( $all_sites as $s ) {
-			// Filter by requested entity/site.
-			if ( $entity !== 'all' && $s['entity_id'] != $entity ) {
+			if ( $entity !== 'all' && $s->entity_id != $entity ) {
 				continue;
 			}
-			if ( $site !== 'all' && $s['site_id'] != $site ) {
+			if ( $site !== 'all' && $s->site_id != $site ) {
 				continue;
 			}
 
-			// ENTRY-LEVEL CAPABILITY CHECK per site/entity.
 			$context = array(
-				'entity_id' => $s['entity_id'],
-				'site_id'   => $s['id'],
+				'entity_id' => $s->entity_id,
+				'site_id'   => $s->id,
 			);
 
-			if ( ! $access->can( 'wrm_view_sales_report', $context ) ) {
-				continue; // skip sites the user cannot access.
+			if ( ! $permissions->can( 'wrm_view_sales', $context ) ) {
+				continue;
 			}
 
-			$allowed_sites[] = $s['site_id'];
+			$allowed_sites[] = $s->site_id;
 
-			$entity_name                    = $entity_map[ $s['entity_id'] ] ?? '';
-			$ent_short                      = explode( ' ', trim( $entity_name ) )[0] ?? '';
-			$site_name_map[ $s['site_id'] ] = trim( $ent_short . ' ' . ( $s['name'] ?? $s['site_title'] ?? '' ) );
+			$entity_name                  = $entity_map[ $s->entity_id ] ?? '';
+			$ent_short                    = explode( ' ', trim( $entity_name ) )[0] ?? '';
+			$site_name_map[ $s->site_id ] = trim( $ent_short . ' ' . ( $s->name ?? $s->site_title ?? '' ) );
 		}
 
 		if ( empty( $allowed_sites ) ) {
@@ -109,7 +107,7 @@ class ReportService {
                 SELECT
                     site_id,
                     site_title,
-                    SUM(CAST(total AS DECIMAL(10,2))) as gross,
+                    CAST(SUM(COALESCE(total,0)) AS DECIMAL(10,2)) as gross,
                     SUM(CAST(subtotal - discounts AS DECIMAL(10,2))) as net,
                     SUM(CAST(tax AS DECIMAL(10,2))) as vat,
                     SUM(CAST(gratuity AS DECIMAL(10,2))) as gratuity
@@ -177,7 +175,7 @@ class ReportService {
 					"
                 SELECT
                     DAYOFWEEK(complete_datetime)-1 as d,
-                    SUM(CAST(total AS DECIMAL(10,2))) as gross,
+                    CAST(SUM(COALESCE(total,0)) AS DECIMAL(10,2)) as gross,
                     SUM(CAST(subtotal - discounts AS DECIMAL(10,2))) as net
                 FROM $t
                 WHERE complete_datetime BETWEEN %s AND %s
@@ -231,6 +229,231 @@ class ReportService {
 		);
 	}
 
+	public static function items( $request ) {
+		global $wpdb;
+
+		$t = $wpdb->prefix . 'wrm_transaction_items';
+
+		$from = $request['from'] . ' 00:00:00';
+		$to   = $request['to'] . ' 23:59:59';
+
+		$last_from = date( 'Y-m-d H:i:s', strtotime( $from . ' -7 days' ) );
+		$last_to   = date( 'Y-m-d H:i:s', strtotime( $to . ' -7 days' ) );
+
+		$entity = $request['entity'] ?? 'all';
+		$site   = $request['site'] ?? 'all';
+
+		// =========================
+		// LOAD ENTITIES & SITES
+		// =========================
+		$entities  = wpac()->entities()->all();
+		$all_sites = wpac()->sites()->all();
+
+		$entity_map = array();
+		foreach ( $entities as $e ) {
+			$entity_map[ $e->id ] = $e->name;
+		}
+
+		$allowed_sites = array();
+		$site_name_map = array();
+		$permissions   = wpac()->permissions();
+
+		foreach ( $all_sites as $s ) {
+
+			if ( $entity !== 'all' && $s->entity_id != $entity ) {
+				continue;
+			}
+
+			if ( $site !== 'all' && $s->site_id != $site ) {
+				continue;
+			}
+
+			$context = array(
+				'entity_id' => $s->entity_id,
+				'site_id'   => $s->id,
+			);
+
+			if ( ! $permissions->can( 'wrm_view_items', $context ) ) {
+				continue;
+			}
+
+			$allowed_sites[] = (int) $s->site_id;
+
+			$entity_name = $entity_map[ $s->entity_id ] ?? '';
+			$ent_short   = explode( ' ', trim( $entity_name ) )[0] ?? '';
+
+			$site_name_map[ $s->site_id ] =
+			trim( $ent_short . ' ' . ( $s->name ?? $s->site_title ?? '' ) );
+		}
+
+		if ( empty( $allowed_sites ) ) {
+			return array(
+				'sites'      => array(),
+				'categories' => array(),
+				'items'      => array(),
+				'days'       => array(),
+			);
+		}
+
+		$ids         = implode( ',', array_map( 'intval', $allowed_sites ) );
+		$where_sites = " AND site_id IN ($ids) AND voided != 1";
+
+		// =========================
+		// FETCH DATA
+		// =========================
+		$fetch_data = function ( $start, $end ) use ( $wpdb, $t, $where_sites, $site_name_map ) {
+
+			// ================= SITES =================
+			$sites = $wpdb->get_results(
+				$wpdb->prepare(
+					"
+				SELECT site_id,
+					   SUM(quantity) AS total_qty,
+					   SUM(price*quantity) AS gross,
+					   SUM(disc_price*quantity) AS net,
+					   SUM(price*quantity - disc_price*quantity) AS discount,
+					   SUM(tax) AS tax
+				FROM $t
+				WHERE added_datetime BETWEEN %s AND %s
+				$where_sites
+				GROUP BY site_id
+				",
+					$start,
+					$end
+				),
+				ARRAY_A
+			);
+
+			// ADD SITE NAME (IMPORTANT FIX)
+			foreach ( $sites as &$s ) {
+				$s['site_name'] = $site_name_map[ $s['site_id'] ] ?? 'Unknown';
+			}
+
+			// ================= CATEGORIES =================
+			$categories = $wpdb->get_results(
+				$wpdb->prepare(
+					"
+				SELECT category_id,
+					   category_name,
+					   SUM(quantity) AS total_qty,
+					   SUM(price*quantity) AS gross,
+					   SUM(disc_price*quantity) AS net,
+					   SUM(price*quantity - disc_price*quantity) AS discount,
+					   SUM(tax) AS tax
+				FROM $t
+				WHERE added_datetime BETWEEN %s AND %s
+				$where_sites
+				GROUP BY category_id, category_name
+				",
+					$start,
+					$end
+				),
+				ARRAY_A
+			);
+
+			// ================= ITEMS =================
+			$items = $wpdb->get_results(
+				$wpdb->prepare(
+					"
+				SELECT item_title,
+					   item_type,
+					   SUM(quantity) AS total_qty,
+					   SUM(price*quantity) AS gross,
+					   SUM(disc_price*quantity) AS net,
+					   SUM(price*quantity - disc_price*quantity) AS discount,
+					   SUM(tax) AS tax
+				FROM $t
+				WHERE added_datetime BETWEEN %s AND %s
+				$where_sites
+				GROUP BY item_title, item_type
+				ORDER BY total_qty DESC
+				LIMIT 50
+				",
+					$start,
+					$end
+				),
+				ARRAY_A
+			);
+
+			// ================= DAYS =================
+			$days = $wpdb->get_results(
+				$wpdb->prepare(
+					"
+				SELECT DAYOFWEEK(added_datetime)-1 AS d,
+					   SUM(quantity) AS total_qty,
+					   SUM(price*quantity) AS gross,
+					   SUM(disc_price*quantity) AS net
+				FROM $t
+				WHERE added_datetime BETWEEN %s AND %s
+				$where_sites
+				GROUP BY d
+				",
+					$start,
+					$end
+				),
+				ARRAY_A
+			);
+
+			return array(
+				'sites'      => $sites,
+				'categories' => $categories,
+				'items'      => $items,
+				'days'       => $days,
+			);
+		};
+
+		// ================= PERIODS =================
+		$this_period = $fetch_data( $from, $to );
+		$last_period = $fetch_data( $last_from, $last_to );
+
+		// ================= DAYS NORMALIZATION =================
+		$dayNames = array( 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' );
+
+		$days = array();
+
+		for ( $i = 0; $i < 7; $i++ ) {
+			$days[ $i ] = array(
+				'day'  => $dayNames[ $i ],
+				'this' => array(
+					'quantity' => 0,
+					'gross'    => 0,
+					'net'      => 0,
+				),
+				'last' => array(
+					'quantity' => 0,
+					'gross'    => 0,
+					'net'      => 0,
+				),
+			);
+		}
+
+		foreach ( $this_period['days'] as $d ) {
+			$i                  = (int) $d['d'];
+			$days[ $i ]['this'] = array(
+				'quantity' => (float) $d['total_qty'],
+				'gross'    => (float) $d['gross'],
+				'net'      => (float) $d['net'],
+			);
+		}
+
+		foreach ( $last_period['days'] as $d ) {
+			$i                  = (int) $d['d'];
+			$days[ $i ]['last'] = array(
+				'quantity' => (float) $d['total_qty'],
+				'gross'    => (float) $d['gross'],
+				'net'      => (float) $d['net'],
+			);
+		}
+
+		return array(
+			'sites'      => $this_period['sites'],
+			'categories' => $this_period['categories'],
+			'items'      => $this_period['items'],
+			'days'       => array_values( $days ),
+			'last'       => $last_period,
+		);
+	}
+
 
 
 	public static function dashboard( $request ) {
@@ -244,9 +467,9 @@ class ReportService {
 		$entity = $request['entity'] ?? 'all';
 		$site   = $request['site'] ?? 'all';
 
-		$entities  = wpac()->entities()->get_all( true );
-		$all_sites = wpac()->sites()->get_all( true );
-		$access    = wpac()->access();
+		$entities    = wpac()->entities()->all( true );
+		$all_sites   = wpac()->sites()->all( true );
+		$permissions = wpac()->permissions();
 
 		$allowed_sites = array();
 		$site_map      = array();
@@ -254,26 +477,26 @@ class ReportService {
 
 		foreach ( $all_sites as $s ) {
 			// Filter by entity/site
-			if ( $entity !== 'all' && $s['entity_id'] != $entity ) {
+			if ( $entity !== 'all' && $s->entity_id != $entity ) {
 				continue;
 			}
-			if ( $site !== 'all' && $s['site_id'] != $site ) {
+			if ( $site !== 'all' && $s->site_id != $site ) {
 				continue;
 			}
 
-			// Permission check
+			// Permission check.
 			$context = array(
-				'entity_id' => $s['entity_id'],
-				'site_id'   => $s['id'],
+				'entity_id' => $s->entity_id,
+				'site_id'   => $s->id,
 			);
-			if ( ! $access->can( 'wrm_view_sales_report', $context ) ) {
+			if ( ! $permissions->can( 'wrm_view_dashboard', $context ) ) {
 				continue;
 			}
 
-			$allowed_sites[]           = $s['site_id'];
-			$entity_name               = $entity_map[ $s['entity_id'] ] ?? '';
-			$ent_short                 = explode( ' ', trim( $entity_name ) )[0] ?? '';
-			$site_map[ $s['site_id'] ] = trim( $ent_short . ' ' . ( $s['name'] ?? $s['site_title'] ?? '' ) );
+			$allowed_sites[]         = $s->site_id;
+			$entity_name             = $entity_map[ $s->entity_id ] ?? '';
+			$ent_short               = explode( ' ', trim( $entity_name ) )[0] ?? '';
+			$site_map[ $s->site_id ] = trim( $ent_short . ' ' . ( $s->name ?? $s->site_title ?? '' ) );
 		}
 
 		if ( empty( $allowed_sites ) ) {
@@ -436,7 +659,7 @@ class ReportService {
 		);
 
 		foreach ( $sites_data as &$s ) {
-			$s['name'] = $site_map[ $s['site_id'] ] ?? 'Site ' . $s['site_id'];
+			$s['name'] = $site_map[ $s['site_id'] ?? 'Site ' . $s['site_id'] ];
 		}
 
 		// =========================
@@ -451,27 +674,6 @@ class ReportService {
             FROM $t
             $where AND complete = 1 AND canceled != 1
             GROUP BY eat_in
-            ",
-				$from,
-				$to
-			),
-			ARRAY_A
-		);
-
-		// =========================
-		// Top 10 Items
-		// =========================
-		$top_items = $wpdb->get_results(
-			$wpdb->prepare(
-				"
-            SELECT menu_name,
-                   SUM(quantity) as sold_qty,
-                   SUM(total) as revenue
-            FROM $ti
-            WHERE site_id IN ($ids) AND complete_datetime BETWEEN %s AND %s
-            GROUP BY menu_id, menu_name
-            ORDER BY revenue DESC
-            LIMIT 10
             ",
 				$from,
 				$to
@@ -509,7 +711,6 @@ class ReportService {
 			'discounts',
 			'refunds',
 			'aov',
-			'top_items'
 		);
 	}
 }

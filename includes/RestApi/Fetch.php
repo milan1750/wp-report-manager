@@ -78,12 +78,12 @@ class Fetch {
 
 		$job = $wpdb->get_row(
 			"
-		SELECT *
-		FROM {$wpdb->prefix}wrm_fetch_jobs
-		WHERE status IN ('pending','running')
-		ORDER BY id DESC
-		LIMIT 1
-	"
+				SELECT *
+				FROM {$wpdb->prefix}wrm_fetch_jobs
+				WHERE status IN ('pending','running')
+				ORDER BY id DESC
+				LIMIT 1
+			"
 		);
 
 		if ( ! $job ) {
@@ -116,33 +116,12 @@ class Fetch {
 
 		$from      = $request['from'] ?? null;
 		$to        = $request['to'] ?? null;
-		$entity_id = $request['entity'] ?? null;
+		$entity_id = (int) ( $request['entity'] ?? 0 );
 
-		if ( $entity_id ) {
-			$entity_id = (int) $entity_id;
-		}
-
-		if ( ! $entity_id ) {
+		if ( ! $entity_id || ! $from || ! $to ) {
 			return array(
 				'status'  => 'error',
-				'message' => 'Missing entity ID',
-			);
-		}
-
-		$entity = wpac()->entities()->get_entity( $entity_id );
-
-		if ( empty( $entity ) ) {
-			return array(
-				'status'  => 'error',
-				'message' => 'Invalid entity',
-			);
-		}
-
-		// Validation.
-		if ( ! $from || ! $to ) {
-			return array(
-				'status'  => 'error',
-				'message' => 'Missing dates',
+				'message' => 'Missing data',
 			);
 		}
 
@@ -153,34 +132,30 @@ class Fetch {
 			);
 		}
 
-		// Atomic lock acquisition (prevents multiple jobs).
-		$lock = (int) get_option( 'wrm_fetch_lock', 0 );
+		$entity = wpac()->entities()->get( $entity_id );
 
-		if ( 0 !== $lock ) {
-
-			$job = $wpdb->get_row(
-				$wpdb->prepare(
-					"SELECT status FROM {$wpdb->prefix}wrm_fetch_jobs WHERE id=%d",
-					$lock
-				)
+		if ( ! $entity ) {
+			return array(
+				'status'  => 'error',
+				'message' => 'Invalid entity',
 			);
-
-			// 🔥 auto-recover from stale lock
-			if (
-			! $job ||
-			in_array( $job->status, array( 'completed', 'cancelled', 'failed' ), true )
-			) {
-				update_option( 'wrm_fetch_lock', 0, false );
-			} else {
-
-				return array(
-					'status'  => 'busy',
-					'message' => 'Another fetch job is already running',
-					'job_id'  => $lock,
-				);
-			}
 		}
-		// Create job.
+
+		// DB-based lock check.
+		$running = $wpdb->get_var(
+			"
+				SELECT id
+				FROM {$wpdb->prefix}wrm_fetch_jobs
+				WHERE status = 'running' or status = 'pending'
+				LIMIT 1
+			"
+		);
+
+		if ( $running ) {
+			return array( 'status' => 'busy' );
+		}
+
+		// create job.
 		$wpdb->insert(
 			$wpdb->prefix . 'wrm_fetch_jobs',
 			array(
@@ -195,17 +170,12 @@ class Fetch {
 
 		$job_id = (int) $wpdb->insert_id;
 
-		// Replace temporary lock with real job ID.
-		update_option( 'wrm_fetch_lock', $job_id, false );
-
-		// Schedule background worker (avoid duplicates).
-		if ( ! wp_next_scheduled( 'wrm_run_fetch_job', array( $job_id ) ) ) {
-			wp_schedule_single_event(
-				time(),
-				'wrm_run_fetch_job',
-				array( $job_id )
-			);
-		}
+		// trigger worker.
+		wp_schedule_single_event(
+			time(),
+			'wrm_run_fetch_job',
+			array( $job_id )
+		);
 
 		return array(
 			'status' => 'queued',

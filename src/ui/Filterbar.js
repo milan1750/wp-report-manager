@@ -19,18 +19,18 @@ export default function FilterBar() {
 
     if (!api || !api.url) {
       setError("WRM_API not loaded");
+      setLoading(false);
       return;
     }
 
-    // load localized data
+    // Load localized data
     setSites(api.sites || []);
     setEntities(api.entities || []);
 
+    // Fetch weeks from REST API
     fetch(`${api.url}weeks`, {
       method: "GET",
-      headers: {
-        "X-WP-Nonce": api.nonce,
-      },
+      headers: { "X-WP-Nonce": api.nonce },
     })
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load weeks");
@@ -40,8 +40,8 @@ export default function FilterBar() {
         const list = data.weeks || [];
         setWeeks(list);
 
+        // Set default filters based on current week
         const current = list.find((w) => w.is_current);
-
         if (current) {
           setFilters((prev) => ({
             ...prev,
@@ -56,8 +56,6 @@ export default function FilterBar() {
       })
       .finally(() => setLoading(false));
   }, []);
-
-	console.log(window.WRM_API);
 
   // =========================
   // FILTER SITES BY ENTITY
@@ -118,7 +116,6 @@ export default function FilterBar() {
 
       default:
         const week = weeks.find((w) => w.week === value);
-
         if (week) {
           from = week.start;
           to = week.end;
@@ -133,7 +130,6 @@ export default function FilterBar() {
 
   return (
     <div className="filter-bar">
-
       {/* DATE RANGE */}
       <select onChange={(e) => handleDate(e.target.value)}>
         <option value="">Select Range</option>
@@ -148,8 +144,8 @@ export default function FilterBar() {
         </optgroup>
 
         <optgroup label="Weeks">
-          {weeks.map((w) => (
-            <option key={w.week} value={w.week}>
+          {weeks.map((w, i) => (
+            <option key={`week-${w.week}-${i}`} value={w.week}>
               {w.week} ({w.start} → {w.end}) {w.is_current ? "🔥" : ""}
             </option>
           ))}
@@ -160,34 +156,24 @@ export default function FilterBar() {
       <input
         type="date"
         value={filters.from || ""}
-        onChange={(e) =>
-          setFilters({ ...filters, from: e.target.value })
-        }
+        onChange={(e) => setFilters({ ...filters, from: e.target.value })}
       />
-
       <input
         type="date"
         value={filters.to || ""}
-        onChange={(e) =>
-          setFilters({ ...filters, to: e.target.value })
-        }
+        onChange={(e) => setFilters({ ...filters, to: e.target.value })}
       />
 
       {/* ENTITY FILTER */}
       <select
         value={filters.entity || "all"}
         onChange={(e) =>
-          setFilters({
-            ...filters,
-            entity: e.target.value,
-            site: "all",
-          })
+          setFilters({ ...filters, entity: e.target.value, site: "all" })
         }
       >
         <option value="all">All Entities</option>
-
         {entities.map((e) => (
-          <option key={e.id} value={e.id}>
+          <option key={`entity-${e.id}`} value={e.id}>
             {e.name}
           </option>
         ))}
@@ -196,14 +182,11 @@ export default function FilterBar() {
       {/* SITE FILTER */}
       <select
         value={filters.site || "all"}
-        onChange={(e) =>
-          setFilters({ ...filters, site: e.target.value })
-        }
+        onChange={(e) => setFilters({ ...filters, site: e.target.value })}
       >
         <option value="all">All Sites</option>
-
         {filteredSites.map((site) => (
-          <option key={site.site_id} value={site.site_id}>
+          <option key={`site-${site.site_id}`} value={site.site_id}>
             {site.name}
           </option>
         ))}
@@ -212,15 +195,12 @@ export default function FilterBar() {
       {/* PAYMENT FILTER */}
       <select
         value={filters.payment}
-        onChange={(e) =>
-          setFilters({ ...filters, payment: e.target.value })
-        }
+        onChange={(e) => setFilters({ ...filters, payment: e.target.value })}
       >
         <option value="all">All Payments</option>
         <option value="card">Card</option>
         <option value="cash">Cash</option>
       </select>
-
     </div>
   );
 }

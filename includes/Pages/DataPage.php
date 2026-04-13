@@ -10,7 +10,7 @@ class DataPage {
 
 	public static function page() {
 		global $wpdb;
-		$entities = wpac()->entities()->get_all( true );
+		$entities = wpac()->entities()->all();
 		$sites    = wpac()->sites()->get_all( true );
 		?>
 

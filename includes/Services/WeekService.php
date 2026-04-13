@@ -1,4 +1,9 @@
 <?php
+/**
+ * Weeks.
+ *
+ * @package WRM
+ */
 
 namespace WRM\Services;
 
@@ -6,8 +11,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Week Service.
+ *
+ * @since 1.0.0
+ */
 class WeekService {
 
+	/**
+	 * Undocumented function
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return array
+	 */
 	public static function get_weeks(): array {
 
 		$week_start_day = (int) get_option( 'wrm_week_start_day', 1 );

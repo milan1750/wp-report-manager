@@ -1,14 +1,32 @@
 <?php
+/**
+ * Reports.
+ *
+ * @package WRM
+ */
+
 namespace WRM\RestApi;
 
 use WP_Error;
 use WRM\Services\ReportService;
 
+/**
+ * Reports.
+ *
+ * @since 1.0.0
+ */
 class Reports {
 
+	/**
+	 * Register.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string $ns Namespace.
+	 */
 	public static function register( $ns ) {
 
-		// DASHBOARD
+		// DASHBOARD.
 		register_rest_route(
 			$ns,
 			'reports/dashboard',
@@ -16,7 +34,7 @@ class Reports {
 				'methods'             => 'GET',
 				'callback'            => array( ReportService::class, 'dashboard' ),
 				'permission_callback' => function ( $request ) {
-					return self::permission_check( $request, 'wrm_view_dashboard_report' );
+					return self::permission_check( $request, 'wrm_view_dashboard' );
 				},
 			)
 		);
@@ -29,12 +47,25 @@ class Reports {
 				'methods'             => 'GET',
 				'callback'            => array( ReportService::class, 'sales' ),
 				'permission_callback' => function ( $request ) {
-					return self::permission_check( $request, 'wrm_view_sales_report' );
+					return self::permission_check( $request, 'wrm_view_sales' );
 				},
 			)
 		);
 
-		// META REPORT
+		// Items REPORT.
+		register_rest_route(
+			$ns,
+			'/reports/items',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( ReportService::class, 'items' ),
+				'permission_callback' => function ( $request ) {
+					return self::permission_check( $request, 'wrm_view_items' );
+				},
+			)
+		);
+
+		// META REPORT.
 		register_rest_route(
 			$ns,
 			'/reports/meta',
@@ -47,9 +78,9 @@ class Reports {
 	}
 
 	/**
-	 * Dashboard permission check
+	 * Dashboard permission check.
 	 */
-	public static function dashboard_permissions( $request ) {
+	public static function dashboard_permissions() {
 		$access = wpac()->access();
 
 		if ( ! $access->can( 'view_dashboard' ) ) {
@@ -64,15 +95,17 @@ class Reports {
 	}
 
 	/**
-	 * Sales report permission check
+	 * Sales report permission check.
+	 *
+	 * @param \WP_Request $request Request.
 	 */
 	public static function sales_permissions( $request ) {
 		$access = wpac()->access();
 
-		$entity_id = $request->get_param( 'entity' ) ?: null;
-		$site_id   = $request->get_param( 'site' ) ?: null;
+		$entity_id = $request->get_param( 'entity' ) ? $request->get_param( 'entity' ) : null;
+		$site_id   = $request->get_param( 'site' ) ? $request->get_param( 'entity' ) : null;
 
-		// General capability
+		// General capability.
 		if ( ! $access->can( 'view_sales_report' ) ) {
 			return new WP_Error(
 				'forbidden',
@@ -81,7 +114,7 @@ class Reports {
 			);
 		}
 
-		// Entity-level scope
+		// Entity-level scope.
 		if ( $entity_id && ! $access->can( 'view_sales_report', $entity_id ) ) {
 			return new WP_Error(
 				'forbidden',
@@ -90,7 +123,7 @@ class Reports {
 			);
 		}
 
-		// Site-level scope
+		// Site-level scope.
 		if ( $site_id && ! $access->can( 'view_sales_report', $site_id ) ) {
 			return new WP_Error(
 				'forbidden',
@@ -103,7 +136,10 @@ class Reports {
 	}
 
 	/**
-	 * Meta report permission check
+	 * Meta report permission check.
+	 *
+	 * @param \WP_Request $request Request.
+	 * @param string      $capability Capability.
 	 */
 	public static function permission_check( $request, $capability ) {
 		$permission = wpac()->permissions();

@@ -53,7 +53,8 @@ class RestApi {
 	public static function register_routes(): void {
 
 		$ns = 'wrm/v1';
-
+		\WRM\RestApi\Users::register( $ns );
+		\WRM\RestApi\Permission::register( $ns );
 		\WRM\RestApi\Fetch::register( $ns );
 		\WRM\RestApi\Weeks::register( $ns );
 		\WRM\RestApi\Data::register( $ns );

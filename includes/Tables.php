@@ -72,33 +72,30 @@ class Tables {
 		// ===== Transaction Items Table =====
 		$items_table = $wpdb->prefix . 'wrm_transaction_items';
 		$sql         = "CREATE TABLE $items_table (
-        id BIGINT(20) NOT NULL AUTO_INCREMENT,
-        transaction_id VARCHAR(150) NOT NULL,
-        site_id INT,
-        product_id INT,
-        product_title VARCHAR(150),
-        category_id INT,
-        category_name VARCHAR(150),
-        item_title VARCHAR(150),
-        item_type VARCHAR(50),
-        quantity DECIMAL(10,2),
-        price DECIMAL(10,2),
-        tax DECIMAL(10,2),
-        disc_price DECIMAL(10,2),
-        disc_tax DECIMAL(10,2),
-        voided TINYINT(1),
-        sale_type VARCHAR(50),
-        added_datetime DATETIME,
-        promo_id INT,
-        price_level_id INT,
-        tax_id INT,
-        item_id INT,
-        PRIMARY KEY (id),
-        KEY idx_transaction_id (transaction_id),
-        KEY idx_product_id (product_id),
-        KEY idx_category_id (category_id),
-        KEY idx_trans_site_prod (transaction_id, site_id, product_id)
-    ) $charset_collate;";
+				id BIGINT(20) NOT NULL AUTO_INCREMENT,
+				transaction_id VARCHAR(150) NOT NULL,
+				item_id VARCHAR(150) NOT NULL,
+				site_id INT,
+				product_id INT,
+				product_title VARCHAR(150),
+				category_id INT,
+				category_name VARCHAR(150),
+				item_title VARCHAR(150),
+				item_type VARCHAR(50),
+				quantity DECIMAL(10,2),
+				price DECIMAL(10,2),
+				tax DECIMAL(10,2),
+				disc_price DECIMAL(10,2),
+				disc_tax DECIMAL(10,2),
+				voided TINYINT(1),
+				sale_type VARCHAR(50),
+				added_datetime DATETIME,
+				promo_id INT,
+				price_level_id INT,
+				tax_id INT,
+				PRIMARY KEY (id),
+				UNIQUE KEY idx_item_id (item_id)
+		) $charset_collate;";
 		dbDelta( $sql );
 
 		// ===== Transaction Payments Table =====

@@ -227,8 +227,8 @@ class KurveApiProvider implements PosProviderInterface {
 
 		foreach ( $rows as $item ) {
 
-			if ( empty( $item['transaction_id'] ) || empty( $item['product_id'] ) ) {
-				continue;
+			if ( empty( $item['transaction_id'] ) || empty( $item['item_id'] ) ) {
+				continue; // item_id is required for uniqueness.
 			}
 
 			$current_site_id = intval( $item['site_id'] ?? 0 );
@@ -237,18 +237,35 @@ class KurveApiProvider implements PosProviderInterface {
 				continue;
 			}
 
-			$wpdb->replace(
-				$table,
-				array(
-					'transaction_id' => sanitize_text_field( $item['transaction_id'] ),
-					'site_id'        => $current_site_id,
-					'product_id'     => intval( $item['product_id'] ),
-					'product_title'  => sanitize_text_field( $item['product_title'] ?? '' ),
-					'quantity'       => floatval( $item['quantity'] ?? 0 ),
-					'price'          => floatval( $item['price'] ?? 0 ),
-					'tax'            => floatval( $item['tax'] ?? 0 ),
-				)
+			// Prepare sanitized values.
+			$data = array(
+				'transaction_id' => sanitize_text_field( $item['transaction_id'] ),
+				'item_id'        => sanitize_text_field( $item['item_id'] ),
+				'site_id'        => $current_site_id,
+				'product_id'     => intval( $item['product_id'] ?? 0 ),
+				'product_title'  => sanitize_text_field( $item['product_title'] ?? '' ),
+				'category_id'    => intval( $item['category_id'] ?? 0 ),
+				'category_name'  => sanitize_text_field( $item['category_name'] ?? '' ),
+				'item_title'     => sanitize_text_field( $item['item_title'] ?? '' ),
+				'item_type'      => sanitize_text_field( $item['item_type'] ?? '' ),
+				'quantity'       => floatval( $item['quantity'] ?? 0 ),
+				'price'          => floatval( $item['price'] ?? 0 ),
+				'disc_price'     => floatval( $item['disc_price'] ?? 0 ),
+				'disc_tax'       => floatval( $item['disc_tax'] ?? 0 ),
+				'tax'            => floatval( $item['tax'] ?? 0 ),
+				'sale_type'      => sanitize_text_field( $item['sale_type'] ?? '' ),
+				'voided'         => intval( $item['voided'] ?? 0 ),
+				'added_datetime' => isset( $item['added_date'], $item['added_time'] )
+				// phpcs:ignore WordPress.DateTime.RestrictedFunctions.date_date
+										? date( 'Y-m-d H:i:s', strtotime( $item['added_date'] . ' ' . $item['added_time'] ) )
+										: current_time( 'mysql' ),
+				'promo_id'       => intval( $item['promo_id'] ?? 0 ),
+				'price_level_id' => intval( $item['price_level_id'] ?? 0 ),
+				'tax_id'         => intval( $item['tax_id'] ?? 0 ),
 			);
+
+			// Insert or update (replace).
+			$wpdb->replace( $table, $data );
 		}
 	}
 
