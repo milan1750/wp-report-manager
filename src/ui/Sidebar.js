@@ -34,6 +34,14 @@ export default function Sidebar({ page, setPage }) {
             🧾 Sales
           </button>
         )}
+	 			{can("daily_sales") && (
+          <button
+            className={page === "daily_sales" ? "active" : ""}
+            onClick={() => setPage("daily_sales")}
+          >
+            🧾 Daily Sales
+          </button>
+        )}
 
         {can("items") && (
           <button
@@ -53,14 +61,6 @@ export default function Sidebar({ page, setPage }) {
           </button>
         )}
 
-				 {can("daily_sales") && (
-          <button
-            className={page === "daily_sales" ? "active" : ""}
-            onClick={() => setPage("daily_sales")}
-          >
-            🧾 Daily Sales
-          </button>
-        )}
 
       </nav>
 

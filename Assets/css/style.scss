@@ -89,7 +89,6 @@ h5 {
 
 .wrm-content {
   flex: 1;
-  overflow: auto;
   padding: var(--space-3);
 }
 
@@ -257,7 +256,10 @@ h5 {
 /* =========================================================
    TABLE SYSTEM
 ========================================================= */
-
+.table-card {
+  width: 100%;
+  overflow-x: scroll;
+}
 .wrm-table {
   width: 100%;
   border-collapse: collapse;

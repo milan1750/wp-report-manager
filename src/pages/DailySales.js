@@ -7,8 +7,11 @@ import React from "react";
 ========================= */
 
 const money = (v) => {
-  const n = Math.round(Number(v || 0));
-  return n.toLocaleString("en-GB"); // 👈 comma formatting
+  const n = Number(v || 0);
+  return n.toLocaleString("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 };
 
 /* =========================
@@ -23,7 +26,7 @@ export default function DailySalesSimple() {
   const [exporting, setExporting] = useState(false);
 
   /* =========================
-     FETCH DATA
+     FETCH
   ========================= */
 
   useEffect(() => {
@@ -49,7 +52,7 @@ export default function DailySalesSimple() {
   }, [filters]);
 
   /* =========================
-     DERIVED DATA
+     DERIVED
   ========================= */
 
   const sites = data?.sites || [];
@@ -67,94 +70,47 @@ export default function DailySalesSimple() {
       .map((s) => s.id);
   }, [sites]);
 
-  const totals = useMemo(() => {
-    return days.reduce(
-      (acc, d) => {
-        Object.values(d.sites || {}).forEach((s) => {
-          acc.net += Number(s.net || 0);
-          acc.gross += Number(s.gross || 0);
-        });
-        return acc;
-      },
-      { net: 0, gross: 0 }
-    );
-  }, [days]);
-
   /* =========================
-     EXPORT EXCEL
+     EXPORT
   ========================= */
 
-	const exportExcel = async () => {
-  const api = window.WRM_API;
-  if (!api?.url || exporting) return;
+  const exportExcel = async () => {
+    const api = window.WRM_API;
+    if (!api?.url || exporting) return;
 
-  setExporting(true);
+    setExporting(true);
 
-  try {
-    const params = new URLSearchParams({
-      from: filters.from,
-      to: filters.to,
-    });
+    try {
+      const params = new URLSearchParams({
+        from: filters.from,
+        to: filters.to,
+      });
 
-    if (filters.entity) params.append("entity", filters.entity);
-    if (filters.site) params.append("site", filters.site);
+      if (filters.entity) params.append("entity", filters.entity);
+      if (filters.site) params.append("site", filters.site);
 
-    const res = await fetch(
-      `${api.url}reports/daily-sales/download?${params.toString()}`,
-      {
-        method: "GET",
-        headers: {
-          "X-WP-Nonce": api.nonce,
+      const res = await fetch(
+        `${api.url}reports/daily-sales/download?${params.toString()}`,
+        {
+          headers: { "X-WP-Nonce": api.nonce },
         },
-      }
-    );
+      );
 
-    if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
 
-    const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "daily-sales.xlsx";
+      a.click();
 
-    // =========================
-    // GET FILENAME FROM HEADER
-    // =========================
-    const disposition = res.headers.get("Content-Disposition");
-    let filename = "daily-sales.xlsx";
-
-    if (disposition && disposition.includes("filename=")) {
-      const match = disposition.match(/filename="?(.+?)"?$/);
-      if (match?.[1]) {
-        filename = match[1];
-      }
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
     }
+  };
 
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename; // 👈 backend filename used here
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    window.URL.revokeObjectURL(url);
-  } catch (e) {
-    console.error(e);
-  } finally {
-    setExporting(false);
-  }
-};
-
-  /* =========================
-     LOADING
-  ========================= */
-
-  if (loading) {
-    return (
-      <div className="wrm-sales">
-        <div className="header-bar">
-          <div className="skeleton" style={{ width: 200, height: 20 }} />
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div>Loading...</div>;
 
   /* =========================
      RENDER
@@ -162,110 +118,99 @@ export default function DailySalesSimple() {
 
   return (
     <div className="wrm-sales">
-
       {/* HEADER */}
       <div className="header-bar">
         <h1>Daily Sales</h1>
 
         <button
-          className="wrm-btn wrm-btn-primary"
+          className="wrm-btn wrm-btn-primary wrm-export-btn"
           onClick={exportExcel}
           disabled={exporting}
         >
-          {exporting ? "Exporting..." : "Export Excel"}
+          {exporting ? (
+            <>
+              <span className="wrm-spinner" />
+              Exporting...
+            </>
+          ) : (
+            "Export Excel"
+          )}
         </button>
       </div>
 
-      {/* TABLE */}
       <div className="table-card">
-        <h2>Day Wise Sales (All Sites)</h2>
-
         <table className="wrm-table">
-
+          {/* =========================
+              HEADER (EXCEL STYLE)
+          ========================= */}
           <thead>
             <tr>
               <th rowSpan="2">Date</th>
               <th rowSpan="2">Day</th>
+              <th rowSpan="2">WK</th>
+
+              <th colSpan="4">Overall</th>
 
               {sortedSiteIds.map((id) => (
-                <th key={id} colSpan="2">
+                <th key={id} colSpan="4">
                   {siteMap[id]}
                 </th>
               ))}
-
-              <th colSpan="2">TOTAL</th>
             </tr>
 
             <tr>
+              {/* Overall */}
+              <th>Net</th>
+              <th>VAT</th>
+              <th>Gross</th>
+              <th>Gratuity</th>
+
+              {/* Sites */}
               {sortedSiteIds.map((id) => (
                 <React.Fragment key={id}>
                   <th>Net</th>
+                  <th>VAT</th>
                   <th>Gross</th>
+                  <th>Gratuity</th>
                 </React.Fragment>
               ))}
-
-              <th>Net</th>
-              <th>Gross</th>
             </tr>
           </thead>
 
+          {/* =========================
+              BODY
+          ========================= */}
           <tbody>
             {days.map((d, i) => {
-              const rowTotals = Object.values(d.sites || {}).reduce(
-                (acc, s) => {
-                  acc.net += Number(s.net || 0);
-                  acc.gross += Number(s.gross || 0);
-                  return acc;
-                },
-                { net: 0, gross: 0 }
-              );
+              const overall = d.overall || {};
 
               return (
                 <tr key={i}>
                   <td>{d.date}</td>
                   <td>{d.day}</td>
+                  <td>{d.week || ""}</td>
 
+                  {/* OVERALL */}
+                  <td>{money(overall.net)}</td>
+                  <td>{money(overall.vat)}</td>
+                  <td>{money(overall.gross)}</td>
+                  <td>{money(overall.gratuity)}</td>
+
+                  {/* SITES */}
                   {sortedSiteIds.map((id) => {
                     const s = d.sites?.[id] || {};
                     return (
                       <React.Fragment key={id}>
                         <td>{money(s.net)}</td>
+                        <td>{money(s.vat)}</td>
                         <td>{money(s.gross)}</td>
+                        <td>{money(s.gratuity)}</td>
                       </React.Fragment>
                     );
                   })}
-
-                  <td>{money(rowTotals.net)}</td>
-                  <td>{money(rowTotals.gross)}</td>
                 </tr>
               );
             })}
-
-            {/* TOTAL ROW */}
-            <tr style={{ fontWeight: "bold", background: "#f3f4f6" }}>
-              <td colSpan="2">TOTAL</td>
-
-              {sortedSiteIds.map((id) => {
-                let net = 0;
-                let gross = 0;
-
-                days.forEach((d) => {
-                  net += Number(d.sites?.[id]?.net || 0);
-                  gross += Number(d.sites?.[id]?.gross || 0);
-                });
-
-                return (
-                  <React.Fragment key={id}>
-                    <td>{money(net)}</td>
-                    <td>{money(gross)}</td>
-                  </React.Fragment>
-                );
-              })}
-
-              <td>{money(totals.net)}</td>
-              <td>{money(totals.gross)}</td>
-            </tr>
-
           </tbody>
         </table>
       </div>

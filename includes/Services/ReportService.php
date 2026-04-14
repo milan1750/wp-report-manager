@@ -840,12 +840,14 @@ class ReportService {
 		foreach ( $rows as $r ) {
 
 			$date    = $r['date'];
+			$week = WeekService::get_week_of_day( $date );
 			$site_id = (int) $r['site_id'];
 
 			if ( ! isset( $data[ $date ] ) ) {
 				$data[ $date ] = array(
 					'date'    => $date,
 					'day'     => gmdate( 'l', strtotime( $date ) ),
+					'week'    => $week['week'] ?? '',
 					'sites'   => array(),
 					'overall' => array(
 						'net'      => 0,
@@ -860,7 +862,6 @@ class ReportService {
 			$vat      = (float) $r['vat'];
 			$gross    = (float) $r['gross'];
 			$gratuity = (float) $r['gratuity'];
-
 			$data[ $date ]['sites'][ $site_id ] = array(
 				'net'      => $net,
 				'vat'      => $vat,

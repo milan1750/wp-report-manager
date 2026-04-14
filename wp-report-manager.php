@@ -3,7 +3,7 @@
  * Plugin Name: WP Report Manager
  * Plugin URI:  https://milanmalla.com/wp-report-manager
  * Description: A WordPress plugin to generate reports for products with role-based access support.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Milan Malla
  * License:     GPL-2.0-or-later
  * Text Domain: wp-report-manager
@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * PLUGIN CONSTANTS
  * ------------------------------------------------------------------------
  */
-define( 'WRM_VERSION', '1.0.0' );
+define( 'WRM_VERSION', '1.0.1' );
 define( 'WRM_PLUGIN_FILE', __FILE__ );
 define( 'WRM_PLUGIN_DIR', __DIR__ );
 define( 'WRM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
