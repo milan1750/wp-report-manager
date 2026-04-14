@@ -1,5 +1,5 @@
 /* =========================================================
-   DESIGN SYSTEM (COMPACT SaaS UI)
+   DESIGN SYSTEM (COMPACT SAAS UI)
 ========================================================= */
 
 :root {
@@ -12,7 +12,6 @@
   --font-medium: 500;
   --font-semibold: 600;
 
-  /* compact spacing system */
   --space-1: 4px;
   --space-2: 6px;
   --space-3: 10px;
@@ -30,6 +29,17 @@
   --bg-soft: #f9fafb;
   --text: #111827;
   --muted: #6b7280;
+}
+
+/* =========================================================
+   GLOBAL FIX (PREVENT BODY SCROLL ISSUES)
+========================================================= */
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
 }
 
 /* =========================================================
@@ -55,7 +65,7 @@ h5 {
 }
 
 /* =========================================================
-   TYPOGRAPHY FIX
+   TYPOGRAPHY
 ========================================================= */
 
 .page-title,
@@ -76,10 +86,11 @@ h5 {
 
 .wrm-layout {
   display: flex;
-  height: 100vh;
-  overflow: hidden;
+  width: 100%;
+  min-height: 100%;
 }
 
+/* MAIN AREA */
 .wrm-main {
   flex: 1;
   display: flex;
@@ -87,13 +98,14 @@ h5 {
   min-width: 0;
 }
 
+/* CONTENT AREA */
 .wrm-content {
   flex: 1;
   padding: var(--space-3);
 }
 
 /* =========================================================
-   SIDEBAR (ISOLATED)
+   SIDEBAR
 ========================================================= */
 
 .wrm-sidebar {
@@ -102,44 +114,49 @@ h5 {
   border-right: 1px solid var(--border);
   padding: var(--space-3);
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 
-  .wrm-brand {
-    margin-bottom: var(--space-3);
+/* brand */
+.wrm-sidebar .wrm-brand {
+  margin-bottom: var(--space-3);
+}
 
-    h2 {
-      font-size: var(--text-lg);
-    }
+.wrm-sidebar .wrm-brand h2 {
+  font-size: var(--text-lg);
+}
 
-    span {
-      font-size: var(--text-xs);
-      color: var(--muted);
-    }
-  }
+.wrm-sidebar .wrm-brand span {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
 
-  .wrm-nav {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
+/* nav */
+.wrm-sidebar .wrm-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
 
-    button {
-      padding: 8px 10px;
-      font-size: var(--text-sm);
-      border: none;
-      background: transparent;
-      text-align: left;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
+.wrm-sidebar .wrm-nav button {
+  padding: 8px 10px;
+  font-size: var(--text-sm);
+  border: none;
+  background: transparent;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
 
-      &:hover {
-        background: var(--bg-soft);
-      }
+.wrm-sidebar .wrm-nav button:hover {
+  background: var(--bg-soft);
+}
 
-      &.active {
-        background: var(--primary);
-        color: #fff;
-      }
-    }
-  }
+.wrm-sidebar .wrm-nav button.active {
+  background: var(--primary);
+  color: #fff;
 }
 
 /* =========================================================
@@ -162,7 +179,7 @@ h5 {
 }
 
 /* =========================================================
-   FILTER BAR (FIXED ALIGNMENT)
+   FILTER BAR
 ========================================================= */
 
 .filter-bar {
@@ -254,10 +271,12 @@ h5 {
 }
 
 /* =========================================================
-   TABLE SYSTEM
+   TABLE SYSTEM (FIXED)
 ========================================================= */
+
 .table-card {
   width: 100%;
+  max-width: 100%;
   background: #fff;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -265,45 +284,52 @@ h5 {
   margin-bottom: var(--space-3);
 
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: auto;
 }
 
+/* TABLE */
 .wrm-table {
-  width: 100%;
+  width: max-content; /* KEY FIX: forces overflow when needed */
+  min-width: 100%; /* keeps small tables normal */
   border-collapse: collapse;
   font-size: var(--text-xs);
-
-  th {
-    background: var(--bg-soft);
-    padding: 8px;
-    text-align: left;
-    border-bottom: 1px solid var(--border);
-  }
-
-  td {
-    padding: 8px;
-    border-bottom: 1px solid #f1f5f9;
-  }
-
-  tbody tr:hover {
-    background: #eef2ff;
-  }
 }
 
-/* =========================================================
-   TABLE CARD
-========================================================= */
-
-.table-card {
-  background: #fff;
+/* HEADER */
+.wrm-table th {
+  background: var(--bg-soft);
+  padding: 8px;
+  text-align: left;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3);
-  margin-bottom: var(--space-3);
+  font-weight: var(--font-semibold);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.wrm-table td:nth-child(n + 4) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* CELLS */
+.wrm-table td {
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+/* HOVER */
+.wrm-table tbody tr:hover {
+  background: #eef2ff;
+}
+
+/* STRIPES */
+.wrm-table tbody tr:nth-child(even) {
+  background: #fafafa;
 }
 
 /* =========================================================
-   DASHBOARD LAYOUT (2 COL FIX)
+   DASHBOARD LAYOUT
 ========================================================= */
 
 .wrm-dashboard {
@@ -319,7 +345,6 @@ h5 {
   gap: var(--space-3);
 }
 
-/* responsive */
 @media (max-width: 900px) {
   .charts-row,
   .tables-row {

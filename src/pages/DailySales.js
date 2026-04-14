@@ -182,8 +182,97 @@ export default function DailySalesSimple() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) {
+    return (
+      <div className="wrm-sales">
+        {/* HEADER SKELETON */}
+        <div className="header-bar">
+          <div className="skeleton" style={{ width: 160, height: 20 }} />
 
+          <div className="export-buttons">
+            <div className="skeleton" style={{ width: 110, height: 32 }} />
+            <div className="skeleton" style={{ width: 110, height: 32 }} />
+          </div>
+        </div>
+
+        {/* SITE TABLE SKELETON */}
+        <div className="table-card">
+          <div
+            className="skeleton"
+            style={{ width: 140, height: 18, marginBottom: 12 }}
+          />
+
+          <table className="wrm-table">
+            <thead>
+              <tr>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <th key={i}>
+                    <div
+                      className="skeleton"
+                      style={{ height: 12, width: "70%" }}
+                    />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 8 }).map((_, j) => (
+                    <td key={j}>
+                      <div
+                        className="skeleton"
+                        style={{ height: 12, width: "80%" }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* DAY TABLE SKELETON */}
+        <div className="table-card">
+          <div
+            className="skeleton"
+            style={{ width: 140, height: 18, marginBottom: 12 }}
+          />
+
+          <table className="wrm-table">
+            <thead>
+              <tr>
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <th key={i}>
+                    <div
+                      className="skeleton"
+                      style={{ height: 12, width: "70%" }}
+                    />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 7 }).map((_, j) => (
+                    <td key={j}>
+                      <div
+                        className="skeleton"
+                        style={{ height: 12, width: "75%" }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
   /* =========================
      RENDER
   ========================= */
