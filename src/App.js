@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Sales from "./pages/Sales";
 import Items from "./pages/Items";
 import Data from "./pages/Data";
+import DailySales from "./pages/DailySales";
 
 export const PermissionContext = createContext();
 export const FilterContext = createContext();
@@ -42,6 +43,7 @@ export default function App() {
           if (data.sales) setPage("sales");
           else if (data.items) setPage("items");
           else if (data.data) setPage("data");
+          else if (data.daily_sales) setPage("daily_sales");
         }
 
       });
@@ -70,6 +72,7 @@ export default function App() {
               {page === "sales" && permissions.sales && <Sales />}
               {page === "items" && permissions.items && <Items />}
               {page === "data" && permissions.data && <Data />}
+              {page === "daily_sales" && permissions.daily_sales && <DailySales />}
 
             </div>
 

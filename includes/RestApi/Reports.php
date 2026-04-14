@@ -52,6 +52,48 @@ class Reports {
 			)
 		);
 
+		/**
+		 * ======================================
+		 * DAILY SALES VIEW (NEW - ISOLATED)
+		 * ======================================
+		 */
+		register_rest_route(
+			$ns,
+			'/reports/daily-sales',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( self::class, 'daily_sales_view' ),
+				'permission_callback' => function ( $request ) {
+						return self::permission_check( $request, 'wrm_view_daily_sales' );
+				},
+				'args'                => array(
+					'from' => array( 'required' => true ),
+					'to'   => array( 'required' => true ),
+				),
+			)
+		);
+
+		/**
+		 * ======================================
+		 * DAILY SALES EXCEL DOWNLOAD
+		 * ======================================
+		 */
+		register_rest_route(
+			$ns,
+			'/reports/daily-sales/download',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( self::class, 'daily_sales_download' ),
+				'permission_callback' => function ( $request ) {
+							return self::permission_check( $request, 'wrm_view_daily_sales' );
+				},
+				'args'                => array(
+					'from' => array( 'required' => true ),
+					'to'   => array( 'required' => true ),
+				),
+			)
+		);
+
 		// Items REPORT.
 		register_rest_route(
 			$ns,
@@ -75,6 +117,60 @@ class Reports {
 				'permission_callback' => array( self::class, 'meta_permissions' ),
 			)
 		);
+	}
+
+	/**
+	 * View Daily Sales.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  \WP_REST_Request $request Request.
+	 */
+	public static function daily_sales_view( \WP_REST_Request $request ) {
+
+		$from = sanitize_text_field( $request->get_param( 'from' ) );
+		$to   = sanitize_text_field( $request->get_param( 'to' ) );
+
+		if ( ! $from || ! $to ) {
+			return new \WP_Error(
+				'missing_dates',
+				'from and to are required',
+				array( 'status' => 400 )
+			);
+		}
+
+		$entity = sanitize_text_field( $request->get_param( 'entity' ) ?? 'all' );
+		$site   = sanitize_text_field( $request->get_param( 'site' ) ?? 'all' );
+
+		$data = ReportService::daily_sales( $from, $to, $entity, $site );
+
+		return rest_ensure_response(
+			array(
+				'success' => true,
+				'data'    => $data,
+			)
+		);
+	}
+
+	/**
+	 * Download Daily Sales.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  \WP_REST_Request $request Request.
+	 */
+	public static function daily_sales_download( \WP_REST_Request $request ) {
+
+		$from = sanitize_text_field( $request['from'] );
+		$to   = sanitize_text_field( $request['to'] );
+
+		$entity = $request['entity'] ?? 'all';
+		$site   = $request['site'] ?? 'all';
+
+		// reuse your existing function.
+		ReportService::wrm_generate_sales_excel( $from, $to, $entity, $site );
+
+		exit;
 	}
 
 	/**

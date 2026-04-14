@@ -53,6 +53,15 @@ export default function Sidebar({ page, setPage }) {
           </button>
         )}
 
+				 {can("daily_sales") && (
+          <button
+            className={page === "daily_sales" ? "active" : ""}
+            onClick={() => setPage("daily_sales")}
+          >
+            🧾 Daily Sales
+          </button>
+        )}
+
       </nav>
 
     </aside>

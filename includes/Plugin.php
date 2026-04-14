@@ -13,6 +13,12 @@ use WRM\Pages\DataPage;
 use WRM\Pages\Settings;
 use WRM\Pages\Report;
 use WRM\Services\FetchService;
+use WRM\Services\WeekService;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Style;
+
+
 
 /**
  * Plugin Main Class.
@@ -21,36 +27,42 @@ use WRM\Services\FetchService;
  */
 class Plugin {
 
+
 	/**
 	 * Plugin Initialization.
 	 *
 	 * @since 1.0.0
 	 */
 	public static function init() {
+
 		RestApi::init();
 		Corn::init();
 		add_action( 'wrm_run_fetch_job', array( FetchService::class, 'run' ), 10, 1 );
 		add_action( 'wpac_render_app_report', array( self::class, 'wp_report_manager_render_app' ) );
 		add_action( 'admin_menu', array( self::class, 'register_menu' ) );
 		add_action( 'wp_enqueue_scripts', array( self::class, 'scripts' ) );
-
+		add_action( 'wp_ajax_wrm_daily_sales_download', array( self::class, 'daily_sales_download' ) );
 		add_filter(
 			'wpac_get_capabilities',
 			function ( $caps ) {
-						$caps['wrm_view_dashboard'] = array(
+						$caps['wrm_view_dashboard']   = array(
 							'label'  => 'View Dashboard',
 							'module' => 'report',
 						);
-						$caps['wrm_view_sales']     = array(
+						$caps['wrm_view_sales']       = array(
 							'label'  => 'View Sales',
 							'module' => 'report',
 						);
-						$caps['wrm_view_items']     = array(
+						$caps['wrm_view_items']       = array(
 							'label'  => 'View Items',
 							'module' => 'report',
 						);
-						$caps['wrm_refresh_data']   = array(
+						$caps['wrm_refresh_data']     = array(
 							'label'  => 'Refresh Data',
+							'module' => 'report',
+						);
+						$caps['wrm_view_daily_sales'] = array(
+							'label'  => 'View Daily Sales',
 							'module' => 'report',
 						);
 						return $caps;
@@ -67,6 +79,31 @@ class Plugin {
 				return $apps;
 			}
 		);
+	}
+
+	public static function daily_sales_download() {
+
+		// =========================
+		// SECURITY CHECK
+		// =========================
+		if ( ! is_user_logged_in() ) {
+			wp_die( 'Unauthorized', 401 );
+		}
+
+		if ( ! check_ajax_referer( 'wp_rest', '_wpnonce', false ) ) {
+			wp_die( 'Invalid nonce', 403 );
+		}
+
+		$from = sanitize_text_field( $request['from'] );
+		$to   = sanitize_text_field( $request['to'] );
+
+		$entity = $request['entity'] ?? 'all';
+		$site   = $request['site'] ?? 'all';
+
+		// reuse your existing function.
+		WRM_Reports::wrm_generate_sales_excel( $from, $to, $entity, $site );
+
+		exit;
 	}
 
 

@@ -6,7 +6,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-
+/**
+ * Report Service
+ *
+ * @since 1.0.0
+ */
 class ReportService {
 
 	public static function meta() {
@@ -455,7 +459,9 @@ class ReportService {
 	}
 
 
-
+	/**
+	 * Dashboard.
+	 */
 	public static function dashboard( $request ) {
 		global $wpdb;
 
@@ -712,5 +718,446 @@ class ReportService {
 			'refunds',
 			'aov',
 		);
+	}
+
+
+	/**
+	 * Daily Sales.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string $from From.
+	 * @param  string $to To.
+	 * @param  string $entity Entity.
+	 * @param  string $site Site.
+	 */
+	public static function daily_sales( $from, $to, $entity = 'all', $site = 'all' ) {
+
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'wrm_transactions';
+
+		$from = $from . ' 00:00:00';
+		$to   = $to . ' 23:59:59';
+
+		$entities    = wpac()->entities()->all();
+		$all_sites   = wpac()->sites()->all();
+		$permissions = wpac()->permissions();
+
+		// =========================
+		// ENTITY MAP
+		// =========================
+		$entity_map = array();
+		foreach ( $entities as $e ) {
+			$entity_map[ $e->id ] = $e->name;
+		}
+
+		// =========================
+		// FILTER SITES
+		// =========================
+		$allowed_sites = array();
+		$site_name_map = array();
+
+		foreach ( $all_sites as $s ) {
+
+			if ( $entity !== 'all' && (int) $s->entity_id !== (int) $entity ) {
+				continue;
+			}
+
+			if ( $site !== 'all' && (int) $s->site_id !== (int) $site ) {
+				continue;
+			}
+
+			$context = array(
+				'entity_id' => $s->entity_id,
+				'site_id'   => $s->site_id,
+			);
+
+			if ( ! $permissions->can( 'wrm_view_daily_sales', $context ) ) {
+				continue;
+			}
+
+			$allowed_sites[] = (int) $s->site_id;
+
+			$entity_name = $entity_map[ $s->entity_id ] ?? '';
+			$short       = explode( ' ', trim( $entity_name ) )[0] ?? '';
+
+			$site_name_map[ $s->site_id ] =
+			trim( $short . ' ' . ( $s->name ?? $s->site_title ?? '' ) );
+		}
+
+		if ( empty( $allowed_sites ) ) {
+			return array(
+				'sites' => array(),
+				'days'  => array(),
+			);
+		}
+
+		// =========================
+		// ORDER SITES BY NAME
+		// =========================
+		uasort(
+			$site_name_map,
+			function ( $a, $b ) {
+				return strcasecmp( $a, $b );
+			}
+		);
+
+		$ids = implode( ',', array_map( 'intval', $allowed_sites ) );
+
+		$where = " AND site_id IN ($ids) AND complete = 1 AND canceled != 1";
+
+		// =========================
+		// FETCH DATA
+		// =========================
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"
+			SELECT
+				DATE(complete_datetime) as date,
+				site_id,
+				SUM(total) as gross,
+				SUM(subtotal - discounts) as net,
+				SUM(tax) as vat,
+				SUM(gratuity) as gratuity
+			FROM $table
+			WHERE complete_datetime BETWEEN %s AND %s
+			$where
+			GROUP BY DATE(complete_datetime), site_id
+			ORDER BY date ASC
+			",
+				$from,
+				$to
+			),
+			ARRAY_A
+		);
+
+		// =========================
+		// BUILD PIVOT
+		// =========================
+		$data = array();
+
+		foreach ( $rows as $r ) {
+
+			$date    = $r['date'];
+			$site_id = (int) $r['site_id'];
+
+			if ( ! isset( $data[ $date ] ) ) {
+				$data[ $date ] = array(
+					'date'    => $date,
+					'day'     => gmdate( 'l', strtotime( $date ) ),
+					'sites'   => array(),
+					'overall' => array(
+						'net'      => 0,
+						'vat'      => 0,
+						'gross'    => 0,
+						'gratuity' => 0,
+					),
+				);
+			}
+
+			$net      = (float) $r['net'];
+			$vat      = (float) $r['vat'];
+			$gross    = (float) $r['gross'];
+			$gratuity = (float) $r['gratuity'];
+
+			$data[ $date ]['sites'][ $site_id ] = array(
+				'net'      => $net,
+				'vat'      => $vat,
+				'gross'    => $gross,
+				'gratuity' => $gratuity,
+			);
+
+			$data[ $date ]['overall']['net']      += $net;
+			$data[ $date ]['overall']['vat']      += $vat;
+			$data[ $date ]['overall']['gross']    += $gross;
+			$data[ $date ]['overall']['gratuity'] += $gratuity;
+		}
+
+		// =========================
+		// RETURN (CLEAN JSON)
+		// =========================
+		return array(
+			'sites' => array_values(
+				array_map(
+					function ( $id ) use ( $site_name_map ) {
+						return array(
+							'id'   => $id,
+							'name' => $site_name_map[ $id ] ?? "Site $id",
+						);
+					},
+					array_keys( $site_name_map )
+				)
+			),
+
+			'days'  => array_values( $data ),
+		);
+	}
+	/**
+	 * Daily Sales Report
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $entity Entity.
+	 * @param string $site Site.
+	 */
+	public static function wrm_generate_sales_excel( $from, $to, $entity = 'all', $site = 'all' ) {
+
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'wrm_transactions';
+
+		$from = gmdate( 'Y-m-d', strtotime( str_replace( '/', '-', $from ) ) ) . ' 00:00:00';
+		$to   = gmdate( 'Y-m-d', strtotime( str_replace( '/', '-', $to ) ) ) . ' 23:59:59';
+
+		$entities    = wpac()->entities()->all();
+		$sites       = wpac()->sites()->all();
+		$permissions = wpac()->permissions();
+
+		// =========================
+		// SITE FILTER + PERMISSIONS
+		// =========================
+		$allowed_site_ids = array();
+		$site_to_entity   = array();
+		$entity_sites     = array();
+		$site_names       = array();
+
+		foreach ( $sites as $s ) {
+
+			if ( 'all' !== $entity && (int) $s->entity_id !== (int) $entity ) {
+				continue;
+			}
+			if ( 'all' !== $site && (int) $s->site_id !== (int) $site ) {
+				continue;
+			}
+
+			$context = array(
+				'entity_id' => $s->entity_id,
+				'site_id'   => $s->site_id,
+			);
+
+			if ( ! $permissions->can( 'wrm_view_sales', $context ) ) {
+				continue;
+			}
+
+			$site_id = (int) $s->site_id;
+
+			$allowed_site_ids[]              = $site_id;
+			$site_to_entity[ $site_id ]      = (int) $s->entity_id;
+			$entity_sites[ $s->entity_id ][] = $site_id;
+			$site_names[ $site_id ]          = $s->name;
+		}
+
+		if ( empty( $allowed_site_ids ) ) {
+			exit;
+		}
+
+		$allowed_ids = implode( ',', array_map( 'intval', $allowed_site_ids ) );
+
+		// =========================
+		// FETCH DATA
+		// =========================
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"
+			SELECT
+				DATE(complete_datetime) as date,
+				site_id,
+				SUM(total) as total,
+				SUM(subtotal - discounts) as net,
+				SUM(tax) as vat,
+				SUM(gratuity) as gratuity
+			FROM $table
+			WHERE complete_datetime BETWEEN %s AND %s
+			AND complete = 1
+			AND canceled != 1
+			AND site_id IN ($allowed_ids)
+			GROUP BY DATE(complete_datetime), site_id
+			ORDER BY date ASC
+			",
+				$from,
+				$to
+			),
+			ARRAY_A
+		);
+
+		// =========================
+		// BUILD DATA
+		// =========================
+		$data = array();
+
+		foreach ( $rows as $r ) {
+
+			$date      = $r['date'];
+			$site_id   = (int) $r['site_id'];
+			$entity_id = $site_to_entity[ $site_id ] ?? 0;
+
+			if ( ! isset( $data[ $entity_id ][ $date ] ) ) {
+				$data[ $entity_id ][ $date ] = array(
+					'sites'   => array(),
+					'overall' => array(
+						'net'      => 0,
+						'vat'      => 0,
+						'gross'    => 0,
+						'gratuity' => 0,
+					),
+				);
+			}
+
+			$net      = (float) $r['net'];
+			$vat      = (float) $r['vat'];
+			$gross    = (float) $r['total'] - (float) $r['gratuity'];
+			$gratuity = (float) $r['gratuity'];
+
+			$data[ $entity_id ][ $date ]['sites'][ $site_id ] = array(
+				'net'      => $net,
+				'vat'      => $vat,
+				'gross'    => $gross,
+				'gratuity' => $gratuity,
+			);
+
+			$data[ $entity_id ][ $date ]['overall']['net']      += $net;
+			$data[ $entity_id ][ $date ]['overall']['vat']      += $vat;
+			$data[ $entity_id ][ $date ]['overall']['gross']    += $gross;
+			$data[ $entity_id ][ $date ]['overall']['gratuity'] += $gratuity;
+		}
+
+		// =========================
+		// INIT EXCEL
+		// =========================
+		$spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+		$sheet_index = 0;
+
+		foreach ( $entities as $entity_obj ) {
+
+			$entity_id   = $entity_obj->id;
+			$entity_name = $entity_obj->name;
+
+			$sites_for_entity = array_values(
+				array_intersect(
+					$entity_sites[ $entity_id ] ?? array(),
+					$allowed_site_ids
+				)
+			);
+
+			if ( empty( $sites_for_entity ) ) {
+				continue;
+			}
+
+			$sheet = 0 === $sheet_index
+				? $spreadsheet->getActiveSheet()
+				: $spreadsheet->createSheet();
+
+			$sheet->setTitle( substr( $entity_name, 0, 31 ) );
+
+			// =========================
+			// HEADERS
+			// =========================
+			$sheet->setCellValue( 'A1', 'Date' );
+			$sheet->setCellValue( 'B1', 'Day' );
+			$sheet->setCellValue( 'C1', 'WK' );
+
+			$sheet->mergeCells( 'A1:A2' );
+			$sheet->mergeCells( 'B1:B2' );
+			$sheet->mergeCells( 'C1:C2' );
+
+			$sheet->setCellValue( 'D1', 'Overall' );
+			$sheet->mergeCells( 'D1:G1' );
+
+			$sheet->setCellValue( 'D2', 'Net' );
+			$sheet->setCellValue( 'E2', 'VAT' );
+			$sheet->setCellValue( 'F2', 'Gross' );
+			$sheet->setCellValue( 'G2', 'Gratuity' );
+
+			// =========================
+			// SITE HEADERS
+			// =========================
+			$col = 8;
+
+			foreach ( $sites_for_entity as $site_id ) {
+
+				$start = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex( $col );
+				$end   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex( $col + 3 );
+
+				$sheet->setCellValue( $start . '1', $site_names[ $site_id ] ?? "Site $site_id" );
+				$sheet->mergeCells( "{$start}1:{$end}1" );
+
+				$sheet->setCellValue( $start . '2', 'Net' );
+				$sheet->setCellValue( \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex( $col + 1 ) . '2', 'VAT' );
+				$sheet->setCellValue( \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex( $col + 2 ) . '2', 'Gross' );
+				$sheet->setCellValue( \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex( $col + 3 ) . '2', 'Gratuity' );
+
+				$col += 4;
+			}
+
+			// =========================
+			// DATA
+			// =========================
+			$row_num = 3;
+
+			foreach ( $data[ $entity_id ] ?? array() as $date => $row_data ) {
+
+				$week = WeekService::get_week_of_day( $date );
+
+				$row = array(
+					$date,
+					gmdate( 'l', strtotime( $date ) ),
+					$week['week'] ?? '',
+					$row_data['overall']['net'],
+					$row_data['overall']['vat'],
+					$row_data['overall']['gross'],
+					$row_data['overall']['gratuity'],
+				);
+
+				foreach ( $sites_for_entity as $site_id ) {
+
+					$s = $row_data['sites'][ $site_id ] ?? array();
+
+					$row[] = $s['net'] ?? 0;
+					$row[] = $s['vat'] ?? 0;
+					$row[] = $s['gross'] ?? 0;
+					$row[] = $s['gratuity'] ?? 0;
+				}
+
+				$sheet->fromArray( $row, null, "A{$row_num}" );
+				++$row_num;
+			}
+
+			// =========================
+			// FORMATTING FIXES
+			// =========================
+
+			$last_row = $sheet->getHighestRow();
+			$last_col = $sheet->getHighestColumn();
+
+			// borders.
+			$sheet->getStyle( "A1:{$last_col}{$last_row}" )
+			->getBorders()
+			->getAllBorders()
+			->setBorderStyle( \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN );
+
+			// number format (commas + decimals).
+			$sheet->getStyle( "D3:ZZ{$last_row}" )
+			->getNumberFormat()
+			->setFormatCode( '#,##0.00' );
+
+			$sheet->freezePane( 'A3' );
+
+			++$sheet_index;
+		}
+
+		// =========================
+		// OUTPUT
+		// =========================
+		$writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx( $spreadsheet );
+
+		header( 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' );
+		header( 'Content-Disposition: attachment; filename="sales_report_' . gmdate( 'y_m_d', strtotime( $from ) ) . '"' );
+		header( 'Cache-Control: max-age=0' );
+
+		$writer->save( 'php://output' );
+		exit;
 	}
 }

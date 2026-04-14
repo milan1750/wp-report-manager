@@ -93,4 +93,67 @@ class WeekService {
 			'weeks'          => $weeks,
 		);
 	}
+
+	/**
+	 * Get week of day.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  string $date Date.
+	 *
+	 * @return array
+	 */
+	public static function get_week_of_day( $date ): array {
+
+		$week_start_day = (int) get_option( 'wrm_week_start_day', 1 );
+
+		$target = new \DateTime( $date );
+		$year   = (int) $target->format( 'Y' );
+
+		$year_start = new \DateTime( "$year-01-01" );
+		$start_dow  = (int) $year_start->format( 'w' );
+
+		// Find anchor (first week start).
+		$diff = $start_dow - $week_start_day;
+		if ( $diff < 0 ) {
+			$diff += 7;
+		}
+
+		$anchor = clone $year_start;
+		$anchor->modify( "-$diff days" );
+
+		// Find week index.
+		$week_index   = 0;
+		$current_week = null;
+
+		for ( $i = 0; $i < 52; $i++ ) {
+
+			$week_start = ( clone $anchor )->modify( "+$i week" );
+			$week_end   = ( clone $week_start )->modify( '+6 days' );
+
+			if ( $target >= $week_start && $target <= $week_end ) {
+
+				$current_week = array(
+					'week'  => 'W' . ( $i + 1 ),
+					'start' => $week_start->format( 'Y-m-d' ),
+					'end'   => $week_end->format( 'Y-m-d' ),
+					'index' => $i + 1,
+				);
+
+				break;
+			}
+
+			// stop if crossed year.
+			if ( $week_start->format( 'Y' ) > $year ) {
+				break;
+			}
+		}
+
+		return $current_week ?? array(
+			'week'  => null,
+			'start' => null,
+			'end'   => null,
+			'index' => null,
+		);
+	}
 }
