@@ -845,7 +845,7 @@ class ReportService {
 
 			if ( ! isset( $data[ $date ] ) ) {
 				$data[ $date ] = array(
-					'date'    => $date,
+					'date'    => gmdate( 'd-m-Y', strtotime( $date ) ),
 					'day'     => gmdate( 'l', strtotime( $date ) ),
 					'week'    => $week['week'] ?? '',
 					'sites'   => array(),
@@ -1103,7 +1103,7 @@ class ReportService {
 				$week = WeekService::get_week_of_day( $date );
 
 				$row = array(
-					$date,
+					gmdate( 'd-m-Y', strtotime( $date ) ),
 					gmdate( 'l', strtotime( $date ) ),
 					$week['week'] ?? '',
 					$row_data['overall']['net'],
@@ -1155,7 +1155,7 @@ class ReportService {
 		$writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx( $spreadsheet );
 
 		header( 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' );
-		header( 'Content-Disposition: attachment; filename="sales_report_' . gmdate( 'y_m_d', strtotime( $from ) ) . '"' );
+		header( 'Content-Disposition: attachment; filename="sales_report_' . gmdate( 'd_m_Y', strtotime( $from ) ) . '_to_' . gmdate( 'd_m_Y', strtotime( $to ) ) . '"' );
 		header( 'Cache-Control: max-age=0' );
 
 		$writer->save( 'php://output' );
@@ -1320,7 +1320,7 @@ class ReportService {
 
 					$sheet->fromArray(
 						array(
-							$date,
+							gmdate( 'd-m-Y', strtotime( $date ) ),
 							$entity_name,
 							$site_name,
 							$record['net'] ?? '',
@@ -1360,7 +1360,7 @@ class ReportService {
 		$writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx( $spreadsheet );
 
 		header( 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' );
-		header( 'Content-Disposition: attachment; filename="sales_report_flat_' . gmdate( 'y_m_d', strtotime( $from ) ) . '.xlsx"' );
+		header( 'Content-Disposition: attachment; filename="sales_report_flat_' . gmdate( 'd_m_Y', strtotime( $from ) ) . '_to_' . gmdate( 'd_m_Y', strtotime( $to ) ) . '.xlsx"' );
 		header( 'Cache-Control: max-age=0' );
 
 		$writer->save( 'php://output' );
