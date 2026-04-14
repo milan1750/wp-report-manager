@@ -1,7 +1,6 @@
 import { useContext, useEffect, useState } from "@wordpress/element";
 import { FilterContext } from "../App";
 
-import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -58,9 +57,10 @@ export default function Sales() {
   const [sites, setSites] = useState([]);
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   /* =========================
-     FETCH
+     FETCH DATA
   ========================= */
 
   useEffect(() => {
@@ -89,96 +89,97 @@ export default function Sales() {
   }, [filters]);
 
   /* =========================
-     PIVOT TOTALS (SITE)
+     SUM HELPER
   ========================= */
 
-  const sum = (arr, path) =>
-    arr.reduce((t, x) => t + Number(path(x) || 0), 0);
+  const sum = (arr, fn) =>
+    arr.reduce((t, x) => t + Number(fn(x) || 0), 0);
+
+  /* =========================
+     TOTALS
+  ========================= */
 
   const siteTotals = {
     netC: sum(sites, (x) => x.this?.net),
     netP: sum(sites, (x) => x.last?.net),
-
     grossC: sum(sites, (x) => x.this?.gross),
     grossP: sum(sites, (x) => x.last?.gross),
-
     vat: sum(sites, (x) => x.this?.vat),
     gratuity: sum(sites, (x) => x.this?.gratuity),
   };
 
   const siteGrat = splitGratuity(siteTotals.gratuity);
 
-  /* =========================
-     PIVOT TOTALS (DAY)
-  ========================= */
-
   const dayTotals = {
     netC: sum(days, (x) => x.this?.net),
     netP: sum(days, (x) => x.last?.net),
-
     grossC: sum(days, (x) => x.this?.gross),
     grossP: sum(days, (x) => x.last?.gross),
   };
 
   /* =========================
-     EXPORT EXCEL
+     EXCEL (API EXPORT)
   ========================= */
 
-  const exportExcel = () => {
-    const siteSheet = sites.map((s) => {
-      const g = splitGratuity(s.this?.gratuity);
+  const exportExcel = async () => {
+    const api = window.WRM_API;
+    if (!api?.url) return;
 
-      return {
-        Site: s.site,
+    setExporting(true);
 
-        Net_C: money(s.this?.net),
-        Net_P: money(s.last?.net),
-        Net_Var: pct(variancePct(s.this?.net, s.last?.net)) + "%",
+    try {
+      const params = new URLSearchParams({
+        from: filters.from,
+        to: filters.to,
+      });
 
-        Gross_C: money(s.this?.gross),
-        Gross_P: money(s.last?.gross),
-        Gross_Var: pct(variancePct(s.this?.gross, s.last?.gross)) + "%",
+      if (filters.entity) params.append("entity", filters.entity);
+      if (filters.site) params.append("site", filters.site);
 
-        VAT: money(s.this?.vat),
-        VAT_Pct: pct(vatPct(s.this?.vat, s.this?.net)) + "%",
+      const res = await fetch(
+        `${api.url}reports/sales/download?${params.toString()}`,
+        {
+          headers: { "X-WP-Nonce": api.nonce },
+        }
+      );
 
-        Gratuity: money(g.gratuity9),
-        EatIn: money(g.eatIn35),
-      };
-    });
+      if (!res.ok) throw new Error("Excel export failed");
 
-    const daySheet = days.map((d) => ({
-      Day: d.day,
-      Net_C: money(d.this?.net),
-      Net_P: money(d.last?.net),
-      Net_Var: pct(variancePct(d.this?.net, d.last?.net)) + "%",
-      Gross_C: money(d.this?.gross),
-      Gross_P: money(d.last?.gross),
-      Gross_Var: pct(variancePct(d.this?.gross, d.last?.gross)) + "%",
-    }));
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteSheet), "Sites");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(daySheet), "Days");
-    XLSX.writeFile(wb, "sales-report.xlsx");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "sales-report.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setExporting(false);
+    }
   };
 
   /* =========================
-     EXPORT PDF
+     PDF EXPORT (FRONTEND)
   ========================= */
 
   const exportPDF = () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF("l", "mm", "a4");
 
-    doc.text("Sales Report", 14, 10);
+    doc.text("Sales Report - Site Performance", 14, 10);
 
     autoTable(doc, {
       startY: 15,
       head: [[
         "Site",
-        "Net C", "Net P", "Net Var",
-        "Gross C", "Gross P", "Gross Var",
-        "VAT", "VAT%", "Grat", "Eat"
+        "Net C", "Net P", "Net Var%",
+        "Gross C", "Gross P", "Gross Var%",
+        "VAT", "VAT%",
+        "Grat", "Eat"
       ]],
       body: sites.map((s) => {
         const g = splitGratuity(s.this?.gratuity);
@@ -201,6 +202,23 @@ export default function Sales() {
           money(g.eatIn35),
         ];
       }),
+      styles: { fontSize: 8 },
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 10,
+      head: [["Day", "Net C", "Net P", "Net Var%", "Gross C", "Gross P", "Gross Var%"]],
+      body: days.map((d) => [
+        d.day,
+        money(d.this?.net),
+        money(d.last?.net),
+        pct(variancePct(d.this?.net, d.last?.net)) + "%",
+
+        money(d.this?.gross),
+        money(d.last?.gross),
+        pct(variancePct(d.this?.gross, d.last?.gross)) + "%",
+      ]),
+      styles: { fontSize: 8 },
     });
 
     doc.save("sales-report.pdf");
@@ -211,96 +229,9 @@ export default function Sales() {
   ========================= */
 
   if (loading) {
-    return (
-      <div className="wrm-sales">
-        {/* HEADER SKELETON */}
-        <div className="header-bar">
-          <div className="skeleton" style={{ width: 160, height: 20 }} />
-
-          <div className="export-buttons">
-            <div className="skeleton" style={{ width: 110, height: 32 }} />
-            <div className="skeleton" style={{ width: 110, height: 32 }} />
-          </div>
-        </div>
-
-        {/* SITE TABLE SKELETON */}
-        <div className="table-card">
-          <div
-            className="skeleton"
-            style={{ width: 140, height: 18, marginBottom: 12 }}
-          />
-
-          <table className="wrm-table">
-            <thead>
-              <tr>
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <th key={i}>
-                    <div
-                      className="skeleton"
-                      style={{ height: 12, width: "70%" }}
-                    />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
-                    <td key={j}>
-                      <div
-                        className="skeleton"
-                        style={{ height: 12, width: "80%" }}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* DAY TABLE SKELETON */}
-        <div className="table-card">
-          <div
-            className="skeleton"
-            style={{ width: 140, height: 18, marginBottom: 12 }}
-          />
-
-          <table className="wrm-table">
-            <thead>
-              <tr>
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <th key={i}>
-                    <div
-                      className="skeleton"
-                      style={{ height: 12, width: "70%" }}
-                    />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
-                    <td key={j}>
-                      <div
-                        className="skeleton"
-                        style={{ height: 12, width: "75%" }}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
+    return <div className="wrm-sales">Loading...</div>;
   }
+
   /* =========================
      RENDER
   ========================= */
@@ -312,9 +243,13 @@ export default function Sales() {
       <div className="header-bar">
         <h1>Sales Report</h1>
 
-       <div className="export-buttons">
-          <button className="wrm-btn wrm-btn-primary" onClick={exportExcel}>
-            Export Excel
+        <div className="export-buttons">
+          <button
+            className="wrm-btn wrm-btn-primary"
+            onClick={exportExcel}
+            disabled={exporting}
+          >
+            {exporting ? "Exporting..." : "Export Excel"}
           </button>
 
           <button className="wrm-btn wrm-btn-secondary" onClick={exportPDF}>
@@ -324,18 +259,16 @@ export default function Sales() {
       </div>
 
       {/* =========================
-          SITE TABLE (PIVOT GROUPED)
+          SITE PERFORMANCE
       ========================= */}
 
       <div className="table-card">
         <h2>Site Performance</h2>
 
         <table className="wrm-table">
-
           <thead>
             <tr>
               <th rowSpan="2">Site</th>
-
               <th colSpan="3">Net Sales</th>
               <th colSpan="3">Gross Sales</th>
               <th colSpan="4">VAT / GRATUITY</th>
@@ -358,7 +291,6 @@ export default function Sales() {
           </thead>
 
           <tbody>
-
             {sites.map((s, i) => {
               const g = splitGratuity(s.this?.gratuity);
 
@@ -387,10 +319,7 @@ export default function Sales() {
               );
             })}
 
-            {/* =========================
-                PIVOT TOTAL ROW (FULL)
-            ========================= */}
-
+            {/* TOTAL */}
             <tr style={{ fontWeight: "bold", background: "#f3f4f6" }}>
               <td>TOTAL</td>
 
@@ -408,28 +337,24 @@ export default function Sales() {
               <td>{money(siteGrat.gratuity9)}</td>
               <td>{money(siteGrat.eatIn35)}</td>
             </tr>
-
           </tbody>
         </table>
       </div>
 
       {/* =========================
-          DAY TABLE (PIVOT)
+          DAY PERFORMANCE
       ========================= */}
 
       <div className="table-card">
         <h2>Day Performance</h2>
 
         <table className="wrm-table">
-
           <thead>
             <tr>
               <th>Day</th>
-
               <th>Net C</th>
               <th>Net P</th>
               <th>Net Var%</th>
-
               <th>Gross C</th>
               <th>Gross P</th>
               <th>Gross Var%</th>
@@ -437,7 +362,6 @@ export default function Sales() {
           </thead>
 
           <tbody>
-
             {days.map((d, i) => (
               <tr key={i}>
                 <td>{d.day}</td>
@@ -456,7 +380,6 @@ export default function Sales() {
               </tr>
             ))}
 
-            {/* DAY TOTAL */}
             <tr style={{ fontWeight: "bold", background: "#f3f4f6" }}>
               <td>TOTAL</td>
 
@@ -468,7 +391,6 @@ export default function Sales() {
               <td>{money(dayTotals.grossP)}</td>
               <td>{pct(variancePct(dayTotals.grossC, dayTotals.grossP))}%</td>
             </tr>
-
           </tbody>
         </table>
       </div>

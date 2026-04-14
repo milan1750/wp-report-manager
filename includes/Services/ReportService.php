@@ -1048,8 +1048,8 @@ class ReportService {
 			}
 
 			$sheet = 0 === $sheet_index
-				? $spreadsheet->getActiveSheet()
-				: $spreadsheet->createSheet();
+			? $spreadsheet->getActiveSheet()
+			: $spreadsheet->createSheet();
 
 			$sheet->setTitle( substr( $entity_name, 0, 31 ) );
 
@@ -1365,5 +1365,490 @@ class ReportService {
 
 		$writer->save( 'php://output' );
 		exit;
+	}
+
+
+	/**
+	 * Sales Report.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $entity Entity.
+	 * @param string $site Site.
+	 */
+	public static function wrm_generate_site_performance_excel( $from, $to, $entity = 'all', $site = 'all' ) {
+
+		global $wpdb;
+
+		$t = $wpdb->prefix . 'wrm_transactions';
+
+		$from_dt = new \DateTime( gmdate( 'Y-m-d', strtotime( str_replace( '/', '-', $from ) ) ) );
+		$to_dt   = new \DateTime( gmdate( 'Y-m-d', strtotime( str_replace( '/', '-', $to ) ) ) );
+
+		$from = $from_dt->format( 'Y-m-d' ) . ' 00:00:00';
+		$to   = $to_dt->format( 'Y-m-d' ) . ' 23:59:59';
+
+		$last_from = gmdate( 'Y-m-d H:i:s', strtotime( $from . ' -7 days' ) );
+		$last_to   = gmdate( 'Y-m-d H:i:s', strtotime( $to . ' -7 days' ) );
+
+		$entities    = wpac()->entities()->all();
+		$sites_all   = wpac()->sites()->all();
+		$permissions = wpac()->permissions();
+
+		$entity_map = array();
+		foreach ( $entities as $e ) {
+			$entity_map[ $e->id ] = $e->name;
+		}
+
+		$allowed_sites = array();
+		$site_name_map = array();
+
+		foreach ( $sites_all as $s ) {
+
+			if ( 'all' !== $entity && $entity !== $s->entity_id ) {
+				continue;
+			}
+			if ( 'all' !== $site && $site !== $s->site_id ) {
+				continue;
+			}
+
+			if ( ! $permissions->can(
+				'wrm_view_sales',
+				array(
+					'entity_id' => $s->entity_id,
+					'site_id'   => $s->site_id,
+				)
+			) ) {
+				continue;
+			}
+
+			$allowed_sites[] = (int) $s->site_id;
+
+			$ent   = $entity_map[ $s->entity_id ] ?? '';
+			$short = explode( ' ', trim( $ent ) )[0] ?? '';
+
+			$site_name_map[ $s->site_id ] =
+			trim( $short . ' ' . ( $s->name ?? $s->site_title ?? '' ) );
+		}
+
+		if ( empty( $allowed_sites ) ) {
+			exit;
+		}
+
+		$ids   = implode( ',', array_map( 'intval', $allowed_sites ) );
+		$where = "AND site_id IN ($ids) AND complete = 1 AND canceled != 1";
+
+		// ================= FETCH =================
+		$fetch = function ( $start, $end ) use ( $wpdb, $t, $where ) {
+			return $wpdb->get_results(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT site_id,
+				 SUM(total) as gross,
+				 SUM(subtotal - discounts) as net,
+				 SUM(tax) as vat,
+				 SUM(gratuity) as gratuity
+				 FROM $t
+				 WHERE complete_datetime BETWEEN %s AND %s
+				 $where
+				 GROUP BY site_id",
+					$start,
+					$end
+				),
+				ARRAY_A
+			);
+		};
+
+		$this_sites = $fetch( $from, $to );
+		$last_sites = $fetch( $last_from, $last_to );
+
+		$sites = array();
+
+		$map = function ( $rows, $key ) use ( &$sites, $site_name_map ) {
+			foreach ( $rows as $r ) {
+				$id = (int) $r['site_id'];
+
+				if ( ! isset( $sites[ $id ] ) ) {
+					$sites[ $id ] = array(
+						'site' => $site_name_map[ $id ] ?? "Site $id",
+						'this' => array(),
+						'last' => array(),
+					);
+				}
+
+				$sites[ $id ][ $key ] = array(
+					'net'   => (float) $r['net'],
+					'gross' => (float) $r['gross'],
+					'vat'   => (float) $r['vat'],
+					'grat'  => (float) $r['gratuity'],
+				);
+			}
+		};
+
+		$map( $this_sites, 'this' );
+		$map( $last_sites, 'last' );
+
+		// ================= EXCEL =================
+		$spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+		$sheet       = $spreadsheet->getActiveSheet();
+		$sheet->setTitle( 'Site Performance' );
+
+		$sheet->getParent()->getDefaultStyle()
+		->getFont()->setName( 'Calibri' )->setSize( 10 );
+
+		$row = 1;
+
+		// TITLE.
+		$sheet->setCellValue( "A{$row}", 'Site Performance' );
+		$sheet->getStyle( "A{$row}" )->getFont()->setBold( true )->setSize( 12 );
+
+		// HEADER.
+		$row = 2;
+
+		$sheet->setCellValue( "A{$row}", 'Site' );
+		$sheet->setCellValue( "B{$row}", 'Net Sales' );
+		$sheet->setCellValue( "E{$row}", 'Gross Sales' );
+		$sheet->setCellValue( "H{$row}", 'VAT / GRATUITY' );
+
+		$sheet->fromArray(
+			array(
+				'',
+				'Current',
+				'Previous',
+				'Variance %',
+				'Current',
+				'Previous',
+				'Variance %',
+				'VAT',
+				'VAT %',
+				'Gratuity',
+				'Eat in Charge',
+			),
+			null,
+			'A' . ( $row + 1 )
+		);
+
+		$sheet->mergeCells( "A{$row}:A" . ( $row + 1 ) );
+		$sheet->mergeCells( "B{$row}:D{$row}" );
+		$sheet->mergeCells( "E{$row}:G{$row}" );
+		$sheet->mergeCells( "H{$row}:K{$row}" );
+
+		$sheet->getStyle( "A{$row}:K" . ( $row + 1 ) )
+		->applyFromArray(
+			array(
+				'font'    => array(
+					'bold' => true,
+					'size' => 10,
+				),
+				'borders' => array(
+					'allBorders' => array(
+						'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+					),
+				),
+			)
+		);
+
+		$row += 2;
+
+		// ================= SITE DATA =================
+		$start_site = $row;
+
+		$tot = array(
+			'nc'   => 0,
+			'np'   => 0,
+			'gc'   => 0,
+			'gp'   => 0,
+			'vat'  => 0,
+			'grat' => 0,
+		);
+
+		foreach ( $sites as $s ) {
+
+			$nc = (float) ( $s['this']['net'] ?? 0 );
+			$np = (float) ( $s['last']['net'] ?? 0 );
+			$gc = (float) ( $s['this']['gross'] ?? 0 );
+			$gp = (float) ( $s['last']['gross'] ?? 0 );
+
+			$net_var   = $np ? ( ( $nc - $np ) / $np ) * 100 : 0;
+			$gross_var = $gp ? ( ( $gc - $gp ) / $gp ) * 100 : 0;
+
+			$sheet->fromArray(
+				array(
+					$s['site'],
+					$nc,
+					$np,
+					$np ? round( $net_var, 1 ) . ' % ' : '0 % ',
+					$gc,
+					$gp,
+					$gp ? round( $gross_var, 1 ) . ' % ' : '0 % ',
+					$s['this']['vat'] ?? 0,
+					$nc ? round( ( ( $s['this']['vat'] ?? 0 ) / $nc ) * 100, 1 ) . ' % ' : '0 % ',
+					$s['this']['grat'] ?? 0,
+					( $s['this']['grat'] ?? 0 ) * ( 3.5 / 9 ),
+				),
+				null,
+				"A{$row}"
+			);
+
+			$sheet->getStyle( "D{$row}" )
+				->applyFromArray( self::get_variance_style( $net_var ) );
+
+			$sheet->getStyle( "G{$row}" )
+				->applyFromArray( self::get_variance_style( $gross_var ) );
+
+			$tot['nc']   += $nc;
+			$tot['np']   += $np;
+			$tot['gc']   += $gc;
+			$tot['gp']   += $gp;
+			$tot['vat']  += $s['this']['vat'] ?? 0;
+			$tot['grat'] += $s['this']['grat'] ?? 0;
+
+			++$row;
+		}
+
+		// SITE TOTAL
+		$sheet->fromArray(
+			array(
+				'TOTAL',
+				$tot['nc'],
+				$tot['np'],
+				$tot['np'] ? round( ( ( $tot['nc'] - $tot['np'] ) / $tot['np'] ) * 100, 1 ) . ' % ' : '0 % ',
+				$tot['gc'],
+				$tot['gp'],
+				$tot['gp'] ? round( ( ( $tot['gc'] - $tot['gp'] ) / $tot['gp'] ) * 100, 1 ) . ' % ' : '0 % ',
+				$tot['vat'],
+				$tot['nc'] ? round( ( $tot['vat'] / $tot['nc'] ) * 100, 1 ) . ' % ' : '0 % ',
+				$tot['grat'],
+				$tot['grat'] * ( 3.5 / 9 ),
+			),
+			null,
+			"A{$row}"
+		);
+
+		$site_end = $row;
+		$row     += 2;
+
+		// ================= DAY PERFORMANCE =================
+		$sheet->setCellValue( "A{$row}", 'Day Performance' );
+		$sheet->getStyle( "A{$row}" )->getFont()->setBold( true )->setSize( 12 );
+
+		++$row;
+		$site_start_day = $row;
+
+		$sheet->fromArray(
+			array(
+				'Day',
+				'Net C',
+				'Net P',
+				'Net var % ',
+				'Gross C',
+				'Gross P',
+				'Gross var % ',
+			),
+			null,
+			"A{$row}"
+		);
+
+		++$row;
+		$day_data_start = $row;
+
+		$days = array( 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' );
+
+		$fetch_day = function ( $start, $end ) use ( $wpdb, $t, $where ) {
+			return $wpdb->get_results(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT DAYOFWEEK(complete_datetime)-1 as d,
+				 SUM(subtotal - discounts) as net,
+				 SUM(total) as gross
+				 FROM $t
+				 WHERE complete_datetime BETWEEN %s AND %s
+				 $where
+				 GROUP BY d",
+					$start,
+					$end
+				),
+				ARRAY_A
+			);
+		};
+
+		$this_days = $fetch_day( $from, $to );
+		$last_days = $fetch_day( $last_from, $last_to );
+
+		$map_day = array_fill(
+			0,
+			7,
+			array(
+				'this' => array(
+					'net'   => 0,
+					'gross' => 0,
+				),
+				'last' => array(
+					'net'   => 0,
+					'gross' => 0,
+				),
+			)
+		);
+
+		foreach ( $this_days as $d ) {
+			$map_day[ (int) $d['d'] ]['this'] = $d;
+		}
+		foreach ( $last_days as $d ) {
+			$map_day[ (int) $d['d'] ]['last'] = $d;
+		}
+
+		$day_totals = array(
+			'nc' => 0,
+			'np' => 0,
+			'gc' => 0,
+			'gp' => 0,
+		);
+
+		foreach ( $days as $i => $name ) {
+
+			$nc = (float) ( $map_day[ $i ]['this']['net'] ?? 0 );
+			$np = (float) ( $map_day[ $i ]['last']['net'] ?? 0 );
+			$gc = (float) ( $map_day[ $i ]['this']['gross'] ?? 0 );
+			$gp = (float) ( $map_day[ $i ]['last']['gross'] ?? 0 );
+
+			$net_var   = $np ? ( ( $nc - $np ) / $np ) * 100 : 0;
+			$gross_var = $gp ? ( ( $gc - $gp ) / $gp ) * 100 : 0;
+
+			$sheet->fromArray(
+				array(
+					$name,
+					$nc,
+					$np,
+					$np ? round( $net_var, 1 ) . ' % ' : '0 % ',
+					$gc,
+					$gp,
+					$gp ? round( $gross_var, 1 ) . ' % ' : '0 % ',
+				),
+				null,
+				"A{$row}"
+			);
+
+			$sheet->getStyle( "D{$row}" )
+				->applyFromArray( self::get_variance_style( $net_var ) );
+
+			$sheet->getStyle( "G{$row}" )
+				->applyFromArray( self::get_variance_style( $gross_var ) );
+
+			$day_totals['nc'] += $nc;
+			$day_totals['np'] += $np;
+			$day_totals['gc'] += $gc;
+			$day_totals['gp'] += $gp;
+
+			++$row;
+		}
+
+		$day_end = $row;
+
+		// DAY TOTAL FIXED.
+		$sheet->fromArray(
+			array(
+				'TOTAL',
+				$day_totals['nc'],
+				$day_totals['np'],
+				$day_totals['np'] ? round( ( ( $day_totals['nc'] - $day_totals['np'] ) / $day_totals['np'] ) * 100, 1 ) . ' % ' : '0 % ',
+				$day_totals['gc'],
+				$day_totals['gp'],
+				$day_totals['gp'] ? round( ( ( $day_totals['gc'] - $day_totals['gp'] ) / $day_totals['gp'] ) * 100, 1 ) . ' % ' : '0 % ',
+			),
+			null,
+			"A{$row}"
+		);
+
+		// ================= BORDERS =================
+		$sheet->getStyle( "A2:K{$site_end}" )
+		->getBorders()->getAllBorders()
+		->setBorderStyle( \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN );
+
+		$sheet->getStyle( "A{$site_start_day}:G{$day_end}" )
+		->getBorders()->getAllBorders()
+		->setBorderStyle( \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN );
+
+		// ================= OUTPUT =================
+		$writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx( $spreadsheet );
+
+		header( 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' );
+		header( 'Content-Disposition: attachment; filename="site_performance.xlsx"' );
+		header( 'Cache-Control: max-age=0' );
+
+		$writer->save( 'php://output' );
+		exit;
+	}
+
+	/**
+	 * Variance Style.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  array $v Variance.
+	 */
+	public static function get_variance_style( $v ) {
+
+		if ( $v <= -5 ) {
+			return array(
+				'fill' => array(
+					'fillType'   => 'solid',
+					'startColor' => array( 'rgb' => 'F8D7DA' ), // light red (soft danger).
+				),
+			);
+		}
+
+		if ( $v <= -2 ) {
+			return array(
+				'fill' => array(
+					'fillType'   => 'solid',
+					'startColor' => array( 'rgb' => 'F5B7B1' ), // soft red.
+				),
+			);
+		}
+
+		if ( $v < 0 ) {
+			return array(
+				'fill' => array(
+					'fillType'   => 'solid',
+					'startColor' => array( 'rgb' => 'FDEBD0' ), // light orange.
+				),
+			);
+		}
+
+		if ( 0 === $v ) {
+			return array(
+				'fill' => array(
+					'fillType'   => 'solid',
+					'startColor' => array( 'rgb' => 'F2F3F4' ), // neutral light gray.
+				),
+			);
+		}
+
+		if ( $v <= 2 ) {
+			return array(
+				'fill' => array(
+					'fillType'   => 'solid',
+					'startColor' => array( 'rgb' => 'D5F5E3' ), // light green.
+				),
+			);
+		}
+
+		if ( $v <= 5 ) {
+			return array(
+				'fill' => array(
+					'fillType'   => 'solid',
+					'startColor' => array( 'rgb' => 'ABEBC6' ), // medium soft green.
+				),
+			);
+		}
+
+		return array(
+			'fill' => array(
+				'fillType'   => 'solid',
+				'startColor' => array( 'rgb' => '82E0AA' ), // strong but still soft green.
+			),
+		);
 	}
 }
