@@ -94,6 +94,22 @@ class Reports {
 			)
 		);
 
+		register_rest_route(
+			$ns,
+			'/reports/daily-sales/download-flat',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( self::class, 'daily_sales_download_flat' ),
+				'permission_callback' => function ( $request ) {
+							return self::permission_check( $request, 'wrm_view_daily_sales' );
+				},
+				'args'                => array(
+					'from' => array( 'required' => true ),
+					'to'   => array( 'required' => true ),
+				),
+			)
+		);
+
 		// Items REPORT.
 		register_rest_route(
 			$ns,
@@ -169,6 +185,27 @@ class Reports {
 
 		// reuse your existing function.
 		ReportService::wrm_generate_sales_excel( $from, $to, $entity, $site );
+
+		exit;
+	}
+
+		/**
+		 * Download Daily Sales.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param  \WP_REST_Request $request Request.
+		 */
+	public static function daily_sales_download_flat( \WP_REST_Request $request ) {
+
+		$from = sanitize_text_field( $request['from'] );
+		$to   = sanitize_text_field( $request['to'] );
+
+		$entity = $request['entity'] ?? 'all';
+		$site   = $request['site'] ?? 'all';
+
+		// reuse your existing function.
+		ReportService::wrm_generate_sales_excel_flat( $from, $to, $entity, $site );
 
 		exit;
 	}

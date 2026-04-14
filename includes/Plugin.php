@@ -41,7 +41,6 @@ class Plugin {
 		add_action( 'wpac_render_app_report', array( self::class, 'wp_report_manager_render_app' ) );
 		add_action( 'admin_menu', array( self::class, 'register_menu' ) );
 		add_action( 'wp_enqueue_scripts', array( self::class, 'scripts' ) );
-		add_action( 'wp_ajax_wrm_daily_sales_download', array( self::class, 'daily_sales_download' ) );
 		add_filter(
 			'wpac_get_capabilities',
 			function ( $caps ) {
@@ -79,31 +78,6 @@ class Plugin {
 				return $apps;
 			}
 		);
-	}
-
-	public static function daily_sales_download() {
-
-		// =========================
-		// SECURITY CHECK
-		// =========================
-		if ( ! is_user_logged_in() ) {
-			wp_die( 'Unauthorized', 401 );
-		}
-
-		if ( ! check_ajax_referer( 'wp_rest', '_wpnonce', false ) ) {
-			wp_die( 'Invalid nonce', 403 );
-		}
-
-		$from = sanitize_text_field( $request['from'] );
-		$to   = sanitize_text_field( $request['to'] );
-
-		$entity = $request['entity'] ?? 'all';
-		$site   = $request['site'] ?? 'all';
-
-		// reuse your existing function.
-		WRM_Reports::wrm_generate_sales_excel( $from, $to, $entity, $site );
-
-		exit;
 	}
 
 

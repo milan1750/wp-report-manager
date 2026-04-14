@@ -840,7 +840,7 @@ class ReportService {
 		foreach ( $rows as $r ) {
 
 			$date    = $r['date'];
-			$week = WeekService::get_week_of_day( $date );
+			$week    = WeekService::get_week_of_day( $date );
 			$site_id = (int) $r['site_id'];
 
 			if ( ! isset( $data[ $date ] ) ) {
@@ -858,10 +858,10 @@ class ReportService {
 				);
 			}
 
-			$net      = (float) $r['net'];
-			$vat      = (float) $r['vat'];
-			$gross    = (float) $r['gross'];
-			$gratuity = (float) $r['gratuity'];
+			$net                                = (float) $r['net'];
+			$vat                                = (float) $r['vat'];
+			$gross                              = (float) $r['gross'];
+			$gratuity                           = (float) $r['gratuity'];
 			$data[ $date ]['sites'][ $site_id ] = array(
 				'net'      => $net,
 				'vat'      => $vat,
@@ -1156,6 +1156,211 @@ class ReportService {
 
 		header( 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' );
 		header( 'Content-Disposition: attachment; filename="sales_report_' . gmdate( 'y_m_d', strtotime( $from ) ) . '"' );
+		header( 'Cache-Control: max-age=0' );
+
+		$writer->save( 'php://output' );
+		exit;
+	}
+
+	/**
+	 * Flat Daily Sales Report (Date / Entity / Site rows)
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param string $from From.
+	 * @param string $to   To.
+	 * @param string $entity Entity.
+	 * @param string $site Site.
+	 */
+	public static function wrm_generate_sales_excel_flat( $from, $to, $entity = 'all', $site = 'all' ) {
+
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'wrm_transactions';
+
+		$from = gmdate( 'Y-m-d', strtotime( str_replace( '/', '-', $from ) ) ) . ' 00:00:00';
+		$to   = gmdate( 'Y-m-d', strtotime( str_replace( '/', '-', $to ) ) ) . ' 23:59:59';
+
+		$entities    = wpac()->entities()->all();
+		$sites       = wpac()->sites()->all();
+		$permissions = wpac()->permissions();
+
+		// -------------------------
+		// FILTER SITES
+		// -------------------------
+		$allowed_site_ids = array();
+		$site_to_entity   = array();
+		$entity_sites     = array();
+		$site_names       = array();
+		$entity_names     = array();
+
+		foreach ( $sites as $s ) {
+
+			if ( 'all' !== $entity && (int) $s->entity_id !== (int) $entity ) {
+				continue;
+			}
+
+			if ( 'all' !== $site && (int) $s->site_id !== (int) $site ) {
+				continue;
+			}
+
+			$context = array(
+				'entity_id' => $s->entity_id,
+				'site_id'   => $s->site_id,
+			);
+
+			if ( ! $permissions->can( 'wrm_view_sales', $context ) ) {
+				continue;
+			}
+
+			$site_id = (int) $s->site_id;
+
+			$allowed_site_ids[] = $site_id;
+
+			$site_to_entity[ $site_id ]      = (int) $s->entity_id;
+			$entity_sites[ $s->entity_id ][] = $site_id;
+
+			$site_names[ $site_id ] = $s->name;
+		}
+
+		if ( empty( $allowed_site_ids ) ) {
+			exit;
+		}
+
+		$allowed_ids = implode( ',', array_map( 'intval', $allowed_site_ids ) );
+
+		// -------------------------
+		// FETCH SALES
+		// -------------------------
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"
+			SELECT
+				DATE(complete_datetime) as date,
+				site_id,
+				SUM(total) as total,
+				SUM(subtotal - discounts) as net,
+				SUM(tax) as vat,
+				SUM(gratuity) as gratuity
+			FROM $table
+			WHERE complete_datetime BETWEEN %s AND %s
+			AND complete = 1
+			AND canceled != 1
+			AND site_id IN ($allowed_ids)
+			GROUP BY DATE(complete_datetime), site_id
+			",
+				$from,
+				$to
+			),
+			ARRAY_A
+		);
+
+		// index: [date][site].
+		$data = array();
+
+		foreach ( $rows as $r ) {
+
+			$date    = $r['date'];
+			$site_id = (int) $r['site_id'];
+			$entity  = $site_to_entity[ $site_id ] ?? 0;
+
+			$data[ $date ][ $entity ][ $site_id ] = array(
+				'net'      => (float) $r['net'],
+				'vat'      => (float) $r['vat'],
+				'gross'    => (float) $r['total'] - (float) $r['gratuity'],
+				'gratuity' => (float) $r['gratuity'],
+			);
+		}
+
+		// -------------------------
+		// DATE RANGE BUILDER
+		// -------------------------
+		$start = new \DateTime( gmdate( 'Y-m-d', strtotime( $from ) ) );
+		$end   = new \DateTime( gmdate( 'Y-m-d', strtotime( $to ) ) );
+
+		$period = new \DatePeriod(
+			$start,
+			new \DateInterval( 'P1D' ),
+			$end->modify( '+1 day' ) // include end date.
+		);
+
+		// -------------------------
+		// EXCEL INIT
+		// -------------------------
+		$spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+		$sheet       = $spreadsheet->getActiveSheet();
+
+		$sheet->setTitle( 'Daily Sales' );
+
+		// HEADERS.
+		$headers = array( 'Date', 'Entity', 'Site', 'Net', 'VAT', 'Gross', 'Gratuity' );
+		$sheet->fromArray( $headers, null, 'A1' );
+
+		$row_num = 2;
+
+		// -------------------------
+		// BUILD FLAT ROWS
+		// -------------------------
+		foreach ( $period as $date_obj ) {
+
+			$date = $date_obj->format( 'Y-m-d' );
+
+			foreach ( $entities as $e ) {
+
+				$entity_id = $e->id;
+
+				$sites_for_entity = $entity_sites[ $entity_id ] ?? array();
+
+				foreach ( $sites_for_entity as $site_id ) {
+
+					$entity_name = $e->name;
+					$site_name   = $site_names[ $site_id ] ?? "Site $site_id";
+
+					$record = $data[ $date ][ $entity_id ][ $site_id ] ?? null;
+
+					$sheet->fromArray(
+						array(
+							$date,
+							$entity_name,
+							$site_name,
+							$record['net'] ?? '',
+							$record['vat'] ?? '',
+							$record['gross'] ?? '',
+							$record['gratuity'] ?? '',
+						),
+						null,
+						"A{$row_num}"
+					);
+
+					++$row_num;
+				}
+			}
+		}
+
+		// -------------------------
+		// FORMATTING
+		// -------------------------
+		$last_row = $sheet->getHighestRow();
+		$last_col = $sheet->getHighestColumn();
+
+		$sheet->getStyle( "A1:{$last_col}{$last_row}" )
+		->getBorders()
+		->getAllBorders()
+		->setBorderStyle( \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN );
+
+		$sheet->getStyle( "D2:G{$last_row}" )
+		->getNumberFormat()
+		->setFormatCode( '#,##0.00' );
+
+		$sheet->freezePane( 'A2' );
+
+		// -------------------------
+		// OUTPUT
+		// -------------------------
+		$writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx( $spreadsheet );
+
+		header( 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' );
+		header( 'Content-Disposition: attachment; filename="sales_report_flat_' . gmdate( 'y_m_d', strtotime( $from ) ) . '.xlsx"' );
 		header( 'Cache-Control: max-age=0' );
 
 		$writer->save( 'php://output' );

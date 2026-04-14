@@ -96,13 +96,85 @@ export default function DailySalesSimple() {
         },
       );
 
+      if (!res.ok) throw new Error("Export failed");
+
       const blob = await res.blob();
+
+      // =========================
+      // GET FILENAME FROM HEADER
+      // =========================
+      const disposition = res.headers.get("Content-Disposition");
+      let filename = "daily-sales.xlsx";
+
+      if (disposition) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match?.[1]) {
+          filename = match[1];
+        }
+      }
+
       const url = window.URL.createObjectURL(blob);
 
       const a = document.createElement("a");
       a.href = url;
-      a.download = "daily-sales.xlsx";
+      a.download = filename;
+      document.body.appendChild(a);
       a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+	  const exportFlatExcel = async () => {
+    const api = window.WRM_API;
+    if (!api?.url || exporting) return;
+
+    setExporting(true);
+
+    try {
+      const params = new URLSearchParams({
+        from: filters.from,
+        to: filters.to,
+      });
+
+      if (filters.entity) params.append("entity", filters.entity);
+      if (filters.site) params.append("site", filters.site);
+
+      const res = await fetch(
+        `${api.url}reports/daily-sales/download-flat?${params.toString()}`,
+        {
+          headers: { "X-WP-Nonce": api.nonce },
+        },
+      );
+
+      if (!res.ok) throw new Error("Export failed");
+
+      const blob = await res.blob();
+
+      // =========================
+      // GET FILENAME FROM HEADER
+      // =========================
+      const disposition = res.headers.get("Content-Disposition");
+      let filename = "daily-sales.xlsx";
+
+      if (disposition) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match?.[1]) {
+          filename = match[1];
+        }
+      }
+
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
 
       window.URL.revokeObjectURL(url);
     } finally {
@@ -121,7 +193,7 @@ export default function DailySalesSimple() {
       {/* HEADER */}
       <div className="header-bar">
         <h1>Daily Sales</h1>
-
+				<div className="wrm-action">
         <button
           className="wrm-btn wrm-btn-primary wrm-export-btn"
           onClick={exportExcel}
@@ -136,6 +208,22 @@ export default function DailySalesSimple() {
             "Export Excel"
           )}
         </button>
+					&nbsp;&nbsp;
+				 <button
+          className="wrm-btn wrm-btn-primary wrm-export-btn"
+          onClick={exportFlatExcel}
+          disabled={exporting}
+        >
+          {exporting ? (
+            <>
+              <span className="wrm-spinner" />
+              Exporting...
+            </>
+          ) : (
+            "Export Flat Excel"
+          )}
+        </button>
+				</div>
       </div>
 
       <div className="table-card">

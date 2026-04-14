@@ -258,8 +258,16 @@ h5 {
 ========================================================= */
 .table-card {
   width: 100%;
-  overflow-x: scroll;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+
+  overflow-x: auto;
+  overflow-y: visible;
 }
+
 .wrm-table {
   width: 100%;
   border-collapse: collapse;
