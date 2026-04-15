@@ -387,7 +387,7 @@ class Reports {
 			$out = fopen( 'php://output', 'w' );
 
 			fputcsv( $out, array_keys( $ordered_rows[0] ) );
-			foreach ( $rows as $row ) {
+			foreach ( $ordered_rows as $row ) {
 				fputcsv( $out, $row );
 			}
 
