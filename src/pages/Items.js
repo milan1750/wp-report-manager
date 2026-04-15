@@ -1,15 +1,36 @@
 import { useContext, useEffect, useState, useMemo } from "@wordpress/element";
 import { FilterContext } from "../App";
+import React from "react";
 
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
+/* =========================
+   HELPERS
+========================= */
+
+const num = (v) => Number(v || 0);
+
+const money = (v) =>
+  num(v).toLocaleString("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+/* =========================
+   COMPONENT
+========================= */
 
 export default function Items() {
   const { filters } = useContext(FilterContext);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  /* =========================
+     FETCH
+  ========================= */
 
   useEffect(() => {
     const api = window.WRM_API;
@@ -41,20 +62,17 @@ export default function Items() {
   const days = data?.days || [];
 
   /* =========================
-     HELPERS
+     DERIVED TOTALS
   ========================= */
-
-  const num = (v) => Number(v || 0);
-  const money = (v) => `£${num(v).toFixed(2)}`;
 
   const totalGross = useMemo(
     () => sites.reduce((a, b) => a + num(b?.gross), 0),
-    [sites],
+    [sites]
   );
 
   const totalQty = useMemo(
     () => sites.reduce((a, b) => a + num(b?.total_qty), 0),
-    [sites],
+    [sites]
   );
 
   /* =========================
@@ -64,17 +82,29 @@ export default function Items() {
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sites), "Sites");
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(sites),
+      "Sites"
+    );
 
     XLSX.utils.book_append_sheet(
       wb,
       XLSX.utils.json_to_sheet(categories),
-      "Categories",
+      "Categories"
     );
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(items), "Items");
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(items),
+      "Items"
+    );
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(days), "Days");
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(days),
+      "Days"
+    );
 
     XLSX.writeFile(wb, "items-report.xlsx");
   };
@@ -125,32 +155,23 @@ export default function Items() {
   if (loading) {
     return (
       <div className="wrm-sales">
-        {/* HEADER SKELETON */}
         <div className="header-bar">
           <div className="skeleton" style={{ width: 160, height: 20 }} />
-
           <div className="export-buttons">
             <div className="skeleton" style={{ width: 110, height: 32 }} />
             <div className="skeleton" style={{ width: 110, height: 32 }} />
           </div>
         </div>
 
-        {/* SITE TABLE SKELETON */}
         <div className="table-card">
-          <div
-            className="skeleton"
-            style={{ width: 140, height: 18, marginBottom: 12 }}
-          />
+          <div className="skeleton" style={{ width: 140, height: 18, marginBottom: 12 }} />
 
           <table className="wrm-table">
             <thead>
               <tr>
-                {Array.from({ length: 8 }).map((_, i) => (
+                {Array.from({ length: 6 }).map((_, i) => (
                   <th key={i}>
-                    <div
-                      className="skeleton"
-                      style={{ height: 12, width: "70%" }}
-                    />
+                    <div className="skeleton" style={{ height: 12, width: "70%" }} />
                   </th>
                 ))}
               </tr>
@@ -159,50 +180,9 @@ export default function Items() {
             <tbody>
               {Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
+                  {Array.from({ length: 6 }).map((_, j) => (
                     <td key={j}>
-                      <div
-                        className="skeleton"
-                        style={{ height: 12, width: "80%" }}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* DAY TABLE SKELETON */}
-        <div className="table-card">
-          <div
-            className="skeleton"
-            style={{ width: 140, height: 18, marginBottom: 12 }}
-          />
-
-          <table className="wrm-table">
-            <thead>
-              <tr>
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <th key={i}>
-                    <div
-                      className="skeleton"
-                      style={{ height: 12, width: "70%" }}
-                    />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
-                    <td key={j}>
-                      <div
-                        className="skeleton"
-                        style={{ height: 12, width: "75%" }}
-                      />
+                      <div className="skeleton" style={{ height: 12, width: "80%" }} />
                     </td>
                   ))}
                 </tr>
@@ -213,7 +193,6 @@ export default function Items() {
       </div>
     );
   }
-
 
   /* =========================
      EMPTY STATE
@@ -221,8 +200,8 @@ export default function Items() {
 
   if (!sites.length && !items.length) {
     return (
-      <div className="wrm-items">
-        <div className="table-card">
+      <div className="wrm-sales">
+        <div className="table-card" style={{ textAlign: "center", padding: 30 }}>
           <h2>No Items Data</h2>
         </div>
       </div>
@@ -230,14 +209,15 @@ export default function Items() {
   }
 
   /* =========================
-     RENDER
+     UI
   ========================= */
 
   return (
-    <div className="wrm-items">
-      {/* HEADER (FIXED - SAME AS SALES STYLE) */}
+    <div className="wrm-sales">
+
+      {/* HEADER */}
       <div className="header-bar">
-        <h1 className="page-title">Items Report</h1>
+        <h1>Items Report</h1>
 
         <div className="export-buttons">
           <button className="wrm-btn wrm-btn-primary" onClick={exportExcel}>
@@ -250,7 +230,7 @@ export default function Items() {
         </div>
       </div>
 
-      {/* KPI (FIXED - NO WRAPPER BUGS) */}
+      {/* KPI */}
       <div className="wrm-cards">
         <div className="card">
           <h4>Total Sites</h4>

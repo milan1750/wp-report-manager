@@ -108,16 +108,8 @@ export default function Sales() {
       .finally(() => setLoading(false));
   }, [filters]);
 
-  /* =========================
-     SUM HELPER
-  ========================= */
-
   const sum = (arr, fn) =>
     arr.reduce((t, x) => t + Number(fn(x) || 0), 0);
-
-  /* =========================
-     TOTALS
-  ========================= */
 
   const siteTotals = {
     netC: sum(sites, (x) => x.this?.net),
@@ -138,7 +130,7 @@ export default function Sales() {
   };
 
   /* =========================
-     EXPORT EXCEL
+     EXPORT
   ========================= */
 
   const exportExcel = async () => {
@@ -174,114 +166,93 @@ export default function Sales() {
       a.remove();
 
       window.URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error(e);
     } finally {
       setExporting(false);
     }
   };
 
-  /* =========================
-     PDF EXPORT (FIXED FORMAT)
-  ========================= */
-
   const exportPDF = () => {
-  const doc = new jsPDF("l", "mm", "a4");
+    const doc = new jsPDF("l", "mm", "a4");
 
-  /* ================= SITE TITLE ================= */
-  doc.text("Sales Report - Site Performance", 14, 10);
+    doc.text("Sales Report - Site Performance", 14, 10);
 
-  autoTable(doc, {
-    startY: 15,
-
-    head: [
-      [
-        { content: "Site", rowSpan: 2 },
-        { content: "Net Sales", colSpan: 3 },
-        { content: "Gross Sales", colSpan: 3 },
-        { content: "VAT / GRATUITY", colSpan: 4 },
+    autoTable(doc, {
+      startY: 15,
+      head: [
+        [
+          { content: "Site", rowSpan: 2 },
+          { content: "Net Sales", colSpan: 3 },
+          { content: "Gross Sales", colSpan: 3 },
+          { content: "VAT / GRATUITY", colSpan: 4 },
+        ],
+        [
+          "Current",
+          "Previous",
+          "Variance%",
+          "Current",
+          "Previous",
+          "Variance%",
+          "VAT",
+          "VAT%",
+          "Grat",
+          "Eat",
+        ],
       ],
-      [
-        "Current",
-        "Previous",
-        "Variance%",
-        "Current",
-        "Previous",
-        "Variance%",
-        "VAT",
-        "VAT%",
-        "Grat",
-        "Eat",
+      body: sites.map((s) => {
+        const g = splitGratuity(s.this?.gratuity);
+
+        return [
+          s.site,
+          moneyPDF(s.this?.net),
+          moneyPDF(s.last?.net),
+          pctPDF(variancePct(s.this?.net, s.last?.net)) + "%",
+          moneyPDF(s.this?.gross),
+          moneyPDF(s.last?.gross),
+          pctPDF(variancePct(s.this?.gross, s.last?.gross)) + "%",
+          moneyPDF(s.this?.vat),
+          pctPDF(vatPct(s.this?.vat, s.this?.net)) + "%",
+          moneyPDF(g.gratuity9),
+          moneyPDF(g.eatIn35),
+        ];
+      }),
+      styles: { fontSize: 8 },
+    });
+
+    const dayStartY = doc.lastAutoTable.finalY + 15;
+
+    doc.text("Sales Report - Day Performance", 14, dayStartY);
+
+    autoTable(doc, {
+      startY: dayStartY + 5,
+      head: [
+        [
+          { content: "Day", rowSpan: 2 },
+          { content: "Net Sales", colSpan: 3 },
+          { content: "Gross Sales", colSpan: 3 },
+        ],
+        [
+          "Current",
+          "Previous",
+          "Variance%",
+          "Current",
+          "Previous",
+          "Variance%",
+        ],
       ],
-    ],
+      body: days.map((d) => [
+        d.day,
+        moneyPDF(d.this?.net),
+        moneyPDF(d.last?.net),
+        pctPDF(variancePct(d.this?.net, d.last?.net)) + "%",
+        moneyPDF(d.this?.gross),
+        moneyPDF(d.last?.gross),
+        pctPDF(variancePct(d.this?.gross, d.last?.gross)) + "%",
+      ]),
+      styles: { fontSize: 8 },
+    });
 
-    body: sites.map((s) => {
-      const g = splitGratuity(s.this?.gratuity);
-
-      return [
-        s.site,
-
-        moneyPDF(s.this?.net),
-        moneyPDF(s.last?.net),
-        pctPDF(variancePct(s.this?.net, s.last?.net)) + "%",
-
-        moneyPDF(s.this?.gross),
-        moneyPDF(s.last?.gross),
-        pctPDF(variancePct(s.this?.gross, s.last?.gross)) + "%",
-
-        moneyPDF(s.this?.vat),
-        pctPDF(vatPct(s.this?.vat, s.this?.net)) + "%",
-
-        moneyPDF(g.gratuity9),
-        moneyPDF(g.eatIn35),
-      ];
-    }),
-
-    styles: { fontSize: 8 },
-  });
-
-  /* ================= DAY TITLE (FIXED POSITION) ================= */
-
-  const dayStartY = doc.lastAutoTable.finalY + 15;
-
-  doc.text("Sales Report - Day Performance", 14, dayStartY);
-
-  autoTable(doc, {
-    startY: dayStartY + 5,
-
-    head: [
-      [
-        { content: "Day", rowSpan: 2 },
-        { content: "Net Sales", colSpan: 3 },
-        { content: "Gross Sales", colSpan: 3 },
-      ],
-      [
-        "Current",
-        "Previous",
-        "Variance%",
-        "Current",
-        "Previous",
-        "Variance%",
-      ],
-    ],
-
-    body: days.map((d) => [
-      d.day,
-
-      moneyPDF(d.this?.net),
-      moneyPDF(d.last?.net),
-      pctPDF(variancePct(d.this?.net, d.last?.net)) + "%",
-
-      moneyPDF(d.this?.gross),
-      moneyPDF(d.last?.gross),
-      pctPDF(variancePct(d.this?.gross, d.last?.gross)) + "%",
-    ]),
-
-    styles: { fontSize: 8 },
-  });
-
-  doc.save("sales-report.pdf");
-};
+    doc.save("sales-report.pdf");
+  };
 
   /* =========================
      LOADING
@@ -289,7 +260,7 @@ export default function Sales() {
 
   if (loading) {
     return (
-      <div className="wrm-sales">
+      <div className="wrm-page">
         {/* HEADER SKELETON */}
         <div className="header-bar">
           <div className="skeleton" style={{ width: 160, height: 20 }} />
@@ -380,7 +351,7 @@ export default function Sales() {
   }
 
   /* =========================
-     UI
+     UI (UNCHANGED LAYOUT)
   ========================= */
 
   return (
@@ -391,15 +362,21 @@ export default function Sales() {
         <h1>Sales Report</h1>
 
         <div className="export-buttons">
-          <button className="wrm-btn wrm-btn-primary" onClick={exportExcel} disabled={exporting}>
+          <button
+            className="wrm-btn wrm-btn-primary"
+            onClick={exportExcel}
+            disabled={exporting}
+          >
             {exporting ? "Exporting..." : "Export Excel"}
           </button>
 
-          <button className="wrm-btn wrm-btn-secondary" onClick={exportPDF}>Export PDF</button>
+          <button className="wrm-btn wrm-btn-secondary" onClick={exportPDF}>
+            Export PDF
+          </button>
         </div>
       </div>
 
-      {/* SITE TABLE */}
+      {/* SITE TABLE (HEADERS PRESERVED) */}
       <div className="table-card">
         <h2>Site Performance</h2>
 
@@ -456,21 +433,16 @@ export default function Sales() {
               );
             })}
 
-            {/* TOTAL */}
             <tr style={{ fontWeight: "bold", background: "#f3f4f6" }}>
               <td>TOTAL</td>
-
               <td>{money(siteTotals.netC)}</td>
               <td>{money(siteTotals.netP)}</td>
               <td>{pct(variancePct(siteTotals.netC, siteTotals.netP))}%</td>
-
               <td>{money(siteTotals.grossC)}</td>
               <td>{money(siteTotals.grossP)}</td>
               <td>{pct(variancePct(siteTotals.grossC, siteTotals.grossP))}%</td>
-
               <td>{money(siteTotals.vat)}</td>
               <td>{pct(vatPct(siteTotals.vat, siteTotals.netC))}%</td>
-
               <td>{money(siteGrat.gratuity9)}</td>
               <td>{money(siteGrat.eatIn35)}</td>
             </tr>
@@ -478,7 +450,7 @@ export default function Sales() {
         </table>
       </div>
 
-      {/* DAY TABLE */}
+      {/* DAY TABLE (HEADERS PRESERVED) */}
       <div className="table-card">
         <h2>Day Performance</h2>
 
@@ -521,11 +493,9 @@ export default function Sales() {
 
             <tr style={{ fontWeight: "bold", background: "#f3f4f6" }}>
               <td>TOTAL</td>
-
               <td>{money(dayTotals.netC)}</td>
               <td>{money(dayTotals.netP)}</td>
               <td>{pct(variancePct(dayTotals.netC, dayTotals.netP))}%</td>
-
               <td>{money(dayTotals.grossC)}</td>
               <td>{money(dayTotals.grossP)}</td>
               <td>{pct(variancePct(dayTotals.grossC, dayTotals.grossP))}%</td>

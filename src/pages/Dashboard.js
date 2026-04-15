@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "@wordpress/element";
+import { useContext, useEffect, useMemo, useState } from "@wordpress/element";
 import { FilterContext } from "../App";
 import {
   Chart as ChartJS,
@@ -21,7 +21,7 @@ ChartJS.register(
   PointElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
 );
 
 export default function Dashboard() {
@@ -34,6 +34,8 @@ export default function Dashboard() {
   useEffect(() => {
     const api = window.WRM_API;
     if (!api?.url) return;
+
+    const controller = new AbortController();
 
     setLoading(true);
     setError(null);
@@ -48,151 +50,220 @@ export default function Dashboard() {
 
     fetch(`${api.url}reports/dashboard?${params.toString()}`, {
       headers: { "X-WP-Nonce": api.nonce },
+      signal: controller.signal,
     })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Error: ${res.status}`);
         return res.json();
       })
       .then(setData)
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (err.name !== "AbortError") setError(err.message);
+      })
       .finally(() => setLoading(false));
+
+    return () => controller.abort();
   }, [filters]);
 
   /* =========================
-     HELPERS (FIXED)
+     HELPERS
   ========================= */
 
   const money = (v) => Math.round(Number(v || 0));
   const num = (v) => Math.round(Number(v || 0) * 100) / 100;
 
   /* =========================
-     LOADING STATE
+     DERIVED DATA (OPTIMIZED)
+  ========================= */
+
+  const kpi = data?.kpi || {};
+  const trend = data?.trend || [];
+  const hourly = data?.hourly || [];
+  const staff = data?.staff || [];
+  const sites = data?.sites_data || [];
+  const insights = data?.insights || {};
+
+  const filteredHourly = useMemo(() => {
+    return hourly
+      .map((h) => ({ ...h, hour: Number(h.hour) }))
+      .filter((h) => h.hour >= 7 && h.hour <= 23)
+      .sort((a, b) => a.hour - b.hour);
+  }, [hourly]);
+
+  const trendChart = useMemo(
+    () => ({
+      labels: trend.map((t) => t.date),
+      datasets: [
+        {
+          label: "Net",
+          data: trend.map((t) => num(t.net)),
+          borderColor: "#2563eb",
+          tension: 0.3,
+        },
+        {
+          label: "Gross",
+          data: trend.map((t) => num(t.gross)),
+          borderColor: "#16a34a",
+          tension: 0.3,
+        },
+      ],
+    }),
+    [trend],
+  );
+
+  const hourlyChart = useMemo(
+    () => ({
+      labels: filteredHourly.map((h) => h.hour),
+      datasets: [
+        {
+          label: "Net",
+          data: filteredHourly.map((h) => num(h.net)),
+          backgroundColor: "#f59e0b",
+        },
+      ],
+    }),
+    [filteredHourly],
+  );
+
+  /* =========================
+     LOADING
   ========================= */
 
   if (loading) {
     return (
       <div className="wrm-dashboard">
-
         <div className="wrm-cards">
           {Array.from({ length: 5 }).map((_, i) => (
             <div className="card" key={i}>
               <div className="skeleton" style={{ height: 10, width: "60%" }} />
-              <div className="skeleton" style={{ height: 18, width: "40%", marginTop: 8 }} />
+              <div
+                className="skeleton"
+                style={{ height: 18, width: "40%", marginTop: 8 }}
+              />
             </div>
           ))}
         </div>
 
-        <div className="table-card skeleton-table" />
-        <div className="table-card skeleton-table" />
-        <div className="table-card skeleton-table" />
-        <div className="table-card skeleton-table" />
+        <div className="wrm-page">
+          {/* SITE TABLE SKELETON */}
+          <div className="table-card">
+            <div
+              className="skeleton"
+              style={{ width: 140, height: 18, marginBottom: 12 }}
+            />
 
+            <table className="wrm-table">
+              <thead>
+                <tr>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <th key={i}>
+                      <div
+                        className="skeleton"
+                        style={{ height: 12, width: "70%" }}
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 8 }).map((_, j) => (
+                      <td key={j}>
+                        <div
+                          className="skeleton"
+                          style={{ height: 12, width: "80%" }}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* DAY TABLE SKELETON */}
+          <div className="table-card">
+            <div
+              className="skeleton"
+              style={{ width: 140, height: 18, marginBottom: 12 }}
+            />
+
+            <table className="wrm-table">
+              <thead>
+                <tr>
+                  {Array.from({ length: 7 }).map((_, i) => (
+                    <th key={i}>
+                      <div
+                        className="skeleton"
+                        style={{ height: 12, width: "70%" }}
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 7 }).map((_, j) => (
+                      <td key={j}>
+                        <div
+                          className="skeleton"
+                          style={{ height: 12, width: "75%" }}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (error) return <div className="loading">{error}</div>;
-  if (!data) return <div className="loading">No data available.</div>;
 
-  const { kpi, trend, hourly, staff, sites_data, insights } = data;
-
-  const filteredHourly =
-    hourly
-      ?.map((h) => ({ ...h, hour: Number(h.hour) }))
-      .filter((h) => h.hour >= 7 && h.hour <= 23)
-      .sort((a, b) => a.hour - b.hour) || [];
+  /* =========================
+     UI
+  ========================= */
 
   return (
     <div className="wrm-dashboard">
-
-      {/* =========================
-          KPI CARDS
-      ========================= */}
-
+      {/* KPI */}
       <div className="wrm-cards">
-
-        <div className="card">
-          <h4>Orders</h4>
-          <p>{kpi?.orders || 0}</p>
-        </div>
-
-        <div className="card">
-          <h4>Gross</h4>
-          <p>£{money(kpi?.gross)}</p>
-        </div>
-
-        <div className="card">
-          <h4>Net</h4>
-          <p>£{money(kpi?.net)}</p>
-        </div>
-
-        <div className="card">
-          <h4>VAT</h4>
-          <p>£{money(kpi?.vat)}</p>
-        </div>
-
-        <div className="card">
-          <h4>Gratuity</h4>
-          <p>£{money(kpi?.gratuity)}</p>
-        </div>
-
+        {[
+          ["Orders", kpi.orders],
+          ["Gross", `£${money(kpi.gross)}`],
+          ["Net", `£${money(kpi.net)}`],
+          ["VAT", `£${money(kpi.vat)}`],
+          ["Gratuity", `£${money(kpi.gratuity)}`],
+        ].map(([label, value]) => (
+          <div className="card" key={label}>
+            <h4>{label}</h4>
+            <p>{value || 0}</p>
+          </div>
+        ))}
       </div>
 
-      {/* =========================
-          CHARTS
-      ========================= */}
-
+      {/* CHARTS */}
       <div className="charts-row">
-
         <div className="table-card">
           <h2>Daily Trend</h2>
-
-          <Line
-            data={{
-              labels: trend?.map((t) => t.date),
-              datasets: [
-                {
-                  label: "Net",
-                  data: trend?.map((t) => num(t.net)),
-                  borderColor: "#2563eb",
-                  tension: 0.3,
-                },
-                {
-                  label: "Gross",
-                  data: trend?.map((t) => num(t.gross)),
-                  borderColor: "#16a34a",
-                  tension: 0.3,
-                },
-              ],
-            }}
-          />
+          <Line data={trendChart} />
         </div>
 
         <div className="table-card">
           <h2>Hourly Net</h2>
-
-          <Bar
-            data={{
-              labels: filteredHourly.map((h) => h.hour),
-              datasets: [
-                {
-                  label: "Net",
-                  data: filteredHourly.map((h) => num(h.net)),
-                  backgroundColor: "#f59e0b",
-                },
-              ],
-            }}
-          />
+          <Bar data={hourlyChart} />
         </div>
-
       </div>
 
-      {/* =========================
-          TABLES
-      ========================= */}
-
+      {/* TABLES */}
       <div className="charts-row">
-
         <div className="table-card">
           <h2>Site Performance</h2>
 
@@ -205,9 +276,8 @@ export default function Dashboard() {
                 <th>Gross</th>
               </tr>
             </thead>
-
             <tbody>
-              {sites_data?.map((s) => (
+              {sites.map((s) => (
                 <tr key={s.site_id}>
                   <td>{s.name}</td>
                   <td>{s.orders}</td>
@@ -231,10 +301,9 @@ export default function Dashboard() {
                 <th>Gross</th>
               </tr>
             </thead>
-
             <tbody>
               {staff
-                ?.filter((s) => s.clerk_name?.trim())
+                .filter((s) => s.clerk_name?.trim())
                 .sort((a, b) => b.net - a.net)
                 .slice(0, 7)
                 .map((s) => (
@@ -247,22 +316,17 @@ export default function Dashboard() {
                 ))}
             </tbody>
           </table>
-
         </div>
-
       </div>
 
-      {/* =========================
-          INSIGHTS
-      ========================= */}
-
+      {/* INSIGHTS */}
       <div className="table-card">
         <h2>Insights</h2>
         <p>
-          Highest Gross Day: <strong>{insights?.highest_gross_day || "N/A"}</strong>
+          Highest Gross Day:{" "}
+          <strong>{insights.highest_gross_day || "N/A"}</strong>
         </p>
       </div>
-
     </div>
   );
 }

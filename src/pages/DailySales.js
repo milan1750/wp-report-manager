@@ -186,7 +186,7 @@ export default function DailySalesSimple() {
 
   if (loading) {
     return (
-      <div className="wrm-sales">
+      <div className="wrm-page">
         {/* HEADER SKELETON */}
         <div className="header-bar">
           <div className="skeleton" style={{ width: 160, height: 20 }} />
@@ -234,44 +234,6 @@ export default function DailySalesSimple() {
             </tbody>
           </table>
         </div>
-
-        {/* DAY TABLE SKELETON */}
-        <div className="table-card">
-          <div
-            className="skeleton"
-            style={{ width: 140, height: 18, marginBottom: 12 }}
-          />
-
-          <table className="wrm-table">
-            <thead>
-              <tr>
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <th key={i}>
-                    <div
-                      className="skeleton"
-                      style={{ height: 12, width: "70%" }}
-                    />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
-                    <td key={j}>
-                      <div
-                        className="skeleton"
-                        style={{ height: 12, width: "75%" }}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </div>
     );
   }
@@ -279,49 +241,39 @@ export default function DailySalesSimple() {
      RENDER
   ========================= */
 
-  return (
-    <div className="wrm-sales">
-      {/* HEADER */}
-      <div className="header-bar">
-        <h1>Daily Sales</h1>
-				<div className="wrm-action">
+return (
+  <div className="wrm-page">
+
+    {/* HEADER */}
+    <div className="header-bar">
+      <h1>Daily Sales</h1>
+
+      <div className="export-buttons">
         <button
-          className="wrm-btn wrm-btn-primary wrm-export-btn"
+          className="wrm-btn wrm-btn-primary"
           onClick={exportExcel}
           disabled={exporting}
         >
-          {exporting ? (
-            <>
-              <span className="wrm-spinner" />
-              Exporting...
-            </>
-          ) : (
-            "Export Excel"
-          )}
+          {exporting ? "Exporting..." : "Export Excel"}
         </button>
-					&nbsp;&nbsp;
-				 <button
-          className="wrm-btn wrm-btn-primary wrm-export-btn"
+
+        <button
+          className="wrm-btn wrm-btn-primary"
           onClick={exportFlatExcel}
-          disabled={exporting}
+          disabled={flatExporting}
         >
-          {flatExporting ? (
-            <>
-              <span className="wrm-spinner" />
-              Exporting...
-            </>
-          ) : (
-            "Export Flat Excel"
-          )}
+          {flatExporting ? "Exporting..." : "Export Flat Excel"}
         </button>
-				</div>
       </div>
+    </div>
+
+    {/* TABLE SECTION */}
+    <div className="wrm-section">
 
       <div className="table-card">
         <table className="wrm-table">
-          {/* =========================
-              HEADER (EXCEL STYLE)
-          ========================= */}
+
+          {/* HEADER */}
           <thead>
             <tr>
               <th rowSpan="2">Date</th>
@@ -338,13 +290,11 @@ export default function DailySalesSimple() {
             </tr>
 
             <tr>
-              {/* Overall */}
               <th>Net</th>
               <th>VAT</th>
               <th>Gross</th>
               <th>Gratuity</th>
 
-              {/* Sites */}
               {sortedSiteIds.map((id) => (
                 <React.Fragment key={id}>
                   <th>Net</th>
@@ -356,9 +306,7 @@ export default function DailySalesSimple() {
             </tr>
           </thead>
 
-          {/* =========================
-              BODY
-          ========================= */}
+          {/* BODY */}
           <tbody>
             {days.map((d, i) => {
               const overall = d.overall || {};
@@ -369,13 +317,11 @@ export default function DailySalesSimple() {
                   <td>{d.day}</td>
                   <td>{d.week || ""}</td>
 
-                  {/* OVERALL */}
                   <td>{money(overall.net)}</td>
                   <td>{money(overall.vat)}</td>
                   <td>{money(overall.gross)}</td>
                   <td>{money(overall.gratuity)}</td>
 
-                  {/* SITES */}
                   {sortedSiteIds.map((id) => {
                     const s = d.sites?.[id] || {};
                     return (
@@ -391,8 +337,12 @@ export default function DailySalesSimple() {
               );
             })}
           </tbody>
+
         </table>
       </div>
+
     </div>
-  );
+
+  </div>
+);
 }
