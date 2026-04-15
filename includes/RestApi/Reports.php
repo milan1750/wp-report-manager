@@ -26,6 +26,21 @@ class Reports {
 	 */
 	public static function register( $ns ) {
 
+		// Power Bi API.
+		register_rest_route(
+			$ns,
+			'/reports/bi/daily-sales',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( self::class, 'daily_sales_download_bi' ),
+				'permission_callback' => array( self::class, 'validate_api_key' ),
+				'args'                => array(
+					'from' => array( 'required' => true ),
+					'to'   => array( 'required' => true ),
+				),
+			)
+		);
+
 		// DASHBOARD.
 		register_rest_route(
 			$ns,
@@ -227,6 +242,166 @@ class Reports {
 	}
 
 	/**
+	 * BI Daily Sales API (Power BI / Tableau / Excel).
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  \WP_REST_Request $request Request.
+	 */
+	public static function daily_sales_download_bi( \WP_REST_Request $request ) {
+
+		self::track_api_hit();
+
+		global $wpdb;
+
+		// ======================
+		// API KEY CHECK
+		// ======================
+		$api_key   = sanitize_text_field( $request->get_param( 'api_key' ) );
+		$saved_key = get_option( 'wrm_bi_api_key' );
+
+		if ( empty( $api_key ) || $api_key !== $saved_key ) {
+			return new \WP_Error(
+				'invalid_api_key',
+				'Invalid API Key',
+				array( 'status' => 403 )
+			);
+		}
+
+		// ======================
+		// INPUTS
+		// ======================
+		$from   = sanitize_text_field( $request->get_param( 'from' ) );
+		$to     = sanitize_text_field( $request->get_param( 'to' ) );
+		$entity = sanitize_text_field( $request->get_param( 'entity' ) ?? 'all' );
+		$site   = sanitize_text_field( $request->get_param( 'site' ) ?? 'all' );
+		$format = strtolower( sanitize_text_field( $request->get_param( 'format' ) ?? 'json' ) );
+
+		if ( empty( $from ) || empty( $to ) ) {
+			return new \WP_Error(
+				'missing_dates',
+				'from and to are required',
+				array( 'status' => 400 )
+			);
+		}
+
+		$table = $wpdb->prefix . 'wrm_transactions';
+
+		// ======================
+		// WHERE BUILDER
+		// ======================
+		$where  = 'WHERE complete_datetime BETWEEN %s AND %s AND complete = 1 AND canceled != 1';
+		$params = array(
+			$from . ' 00:00:00',
+			$to . ' 23:59:59',
+		);
+
+		if ( 'all' !== $site ) {
+			$where   .= ' AND site_id = %d';
+			$params[] = (int) $site;
+		}
+
+		// ======================
+		// SQL QUERY
+		// ======================
+		$sql = "
+		SELECT
+			DATE(complete_datetime) AS date,
+			site_id,
+			COUNT(*) AS orders,
+			SUM(subtotal - discounts) AS net,
+			SUM(tax) AS vat,
+			SUM(total) AS gross,
+			SUM(gratuity) AS gratuity
+		FROM {$table}
+		{$where}
+		GROUP BY DATE(complete_datetime), site_id
+		ORDER BY date ASC
+	";
+
+		$query = $wpdb->prepare( $sql, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$rows  = $wpdb->get_results( $query, ARRAY_A );  // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		if ( empty( $rows ) ) {
+			return rest_ensure_response(
+				array(
+					'data' => array(),
+				)
+			);
+		}
+
+		// ======================
+		// LOOKUP MAPS (FAST)
+		// ======================
+		$entities = wpac()->entities()->all();
+		$sites    = wpac()->sites()->all();
+
+		$entity_map      = array();
+		$site_map        = array();
+		$site_entity_map = array();
+
+		foreach ( $entities as $e ) {
+			$entity_map[ $e->id ] = $e->name;
+		}
+
+		foreach ( $sites as $s ) {
+			$site_map[ $s->site_id ]        = $s->name;
+			$site_entity_map[ $s->site_id ] = $s->entity_id;
+		}
+
+		// ======================
+		// ENRICH DATA
+		// ======================
+		$ordered_rows = array();
+
+		foreach ( $rows as $row ) {
+
+			$site_id = (int) $row['site_id'];
+
+			$entity_id = $site_entity_map[ $site_id ] ?? 0;
+
+			$ordered_rows[] = array(
+				'date'      => $row['date'],
+				'entity_id' => $entity_id,
+				'entity'    => $entity_map[ $entity_id ] ?? '',
+				'site_id'   => $site_id,
+				'site'      => $site_map[ $site_id ] ?? 'NA',
+				'orders'    => (int) $row['orders'],
+				'net'       => (float) $row['net'],
+				'vat'       => (float) $row['vat'],
+				'gross'     => (float) $row['gross'],
+				'gratuity'  => (float) $row['gratuity'],
+			);
+		}
+
+		unset( $row );
+
+		// ======================
+		// CSV OUTPUT
+		// ======================
+		if ( 'csv' === $format ) {
+
+			header( 'Content-Type: text/csv; charset=utf-8' );
+			header( 'Content-Disposition: attachment; filename=daily_sales_' . gmdate( 'Ymd_His' ) . '.csv' );
+
+			$out = fopen( 'php://output', 'w' );
+
+			fputcsv( $out, array_keys( $ordered_rows[0] ) );
+			foreach ( $rows as $row ) {
+				fputcsv( $out, $row );
+			}
+
+			fclose( $out );
+			exit;
+		}
+
+		// ======================
+		// JSON OUTPUT (Power BI FRIENDLY)
+		// ======================
+		return rest_ensure_response( $ordered_rows );
+	}
+
+	/**
 	 * Download Daily Sales.
 	 *
 	 * @since 1.0.0
@@ -323,5 +498,60 @@ class Reports {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Validate BI API key.
+	 *
+	 * @param \WP_Request $request Request.
+	 */
+	public static function validate_api_key( $request ) {
+
+		$api_key = sanitize_text_field( $request->get_param( 'api_key' ) );
+
+		$saved_key = get_option( 'wrm_bi_api_key' );
+
+		if ( empty( $api_key ) || $api_key !== $saved_key ) {
+
+			return new \WP_Error(
+				'invalid_api_key',
+				'Invalid API Key',
+				array( 'status' => 403 )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Track Power BI API Hit.
+	 *
+	 * Keeps only last 5 days of stats.
+	 *
+	 * @since 1.0.0
+	 */
+	private static function track_api_hit() {
+
+		$stats = get_option( 'wrm_api_usage_stats', array() );
+
+		$today = gmdate( 'Y-m-d' );
+
+		// increment today.
+		if ( ! isset( $stats[ $today ] ) ) {
+			$stats[ $today ] = 0;
+		}
+
+		++$stats[ $today ];
+
+		// keep only last 5 days.
+		$cutoff = gmdate( 'Y-m-d', strtotime( '-5 days' ) );
+
+		foreach ( $stats as $date => $count ) {
+			if ( $date < $cutoff ) {
+				unset( $stats[ $date ] );
+			}
+		}
+
+		update_option( 'wrm_api_usage_stats', $stats );
 	}
 }

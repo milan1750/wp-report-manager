@@ -5,12 +5,32 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 /* =========================
-   HELPERS
+   FORMAT HELPERS (FIXED)
 ========================= */
 
-const money = (v) => Math.round(Number(v || 0));
+const money = (v) =>
+  Number(v || 0).toLocaleString("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
-const pct = (v) => Number(v || 0).toFixed(1);
+const moneyPDF = (v) =>
+  Number(v || 0).toLocaleString("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+const pct = (v) =>
+  Number(v || 0).toLocaleString("en-GB", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+
+const pctPDF = (v) =>
+  Number(v || 0).toLocaleString("en-GB", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
 
 const variancePct = (c = 0, p = 0) => {
   const cur = Number(c || 0);
@@ -118,7 +138,7 @@ export default function Sales() {
   };
 
   /* =========================
-     EXCEL (API EXPORT)
+     EXPORT EXCEL
   ========================= */
 
   const exportExcel = async () => {
@@ -143,8 +163,6 @@ export default function Sales() {
         }
       );
 
-      if (!res.ok) throw new Error("Excel export failed");
-
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
 
@@ -164,76 +182,205 @@ export default function Sales() {
   };
 
   /* =========================
-     PDF EXPORT (FRONTEND)
+     PDF EXPORT (FIXED FORMAT)
   ========================= */
 
   const exportPDF = () => {
-    const doc = new jsPDF("l", "mm", "a4");
+  const doc = new jsPDF("l", "mm", "a4");
 
-    doc.text("Sales Report - Site Performance", 14, 10);
+  /* ================= SITE TITLE ================= */
+  doc.text("Sales Report - Site Performance", 14, 10);
 
-    autoTable(doc, {
-      startY: 15,
-      head: [[
-        "Site",
-        "Net C", "Net P", "Net Var%",
-        "Gross C", "Gross P", "Gross Var%",
-        "VAT", "VAT%",
-        "Grat", "Eat"
-      ]],
-      body: sites.map((s) => {
-        const g = splitGratuity(s.this?.gratuity);
+  autoTable(doc, {
+    startY: 15,
 
-        return [
-          s.site,
+    head: [
+      [
+        { content: "Site", rowSpan: 2 },
+        { content: "Net Sales", colSpan: 3 },
+        { content: "Gross Sales", colSpan: 3 },
+        { content: "VAT / GRATUITY", colSpan: 4 },
+      ],
+      [
+        "Current",
+        "Previous",
+        "Variance%",
+        "Current",
+        "Previous",
+        "Variance%",
+        "VAT",
+        "VAT%",
+        "Grat",
+        "Eat",
+      ],
+    ],
 
-          money(s.this?.net),
-          money(s.last?.net),
-          pct(variancePct(s.this?.net, s.last?.net)) + "%",
+    body: sites.map((s) => {
+      const g = splitGratuity(s.this?.gratuity);
 
-          money(s.this?.gross),
-          money(s.last?.gross),
-          pct(variancePct(s.this?.gross, s.last?.gross)) + "%",
+      return [
+        s.site,
 
-          money(s.this?.vat),
-          pct(vatPct(s.this?.vat, s.this?.net)) + "%",
+        moneyPDF(s.this?.net),
+        moneyPDF(s.last?.net),
+        pctPDF(variancePct(s.this?.net, s.last?.net)) + "%",
 
-          money(g.gratuity9),
-          money(g.eatIn35),
-        ];
-      }),
-      styles: { fontSize: 8 },
-    });
+        moneyPDF(s.this?.gross),
+        moneyPDF(s.last?.gross),
+        pctPDF(variancePct(s.this?.gross, s.last?.gross)) + "%",
 
-    autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 10,
-      head: [["Day", "Net C", "Net P", "Net Var%", "Gross C", "Gross P", "Gross Var%"]],
-      body: days.map((d) => [
-        d.day,
-        money(d.this?.net),
-        money(d.last?.net),
-        pct(variancePct(d.this?.net, d.last?.net)) + "%",
+        moneyPDF(s.this?.vat),
+        pctPDF(vatPct(s.this?.vat, s.this?.net)) + "%",
 
-        money(d.this?.gross),
-        money(d.last?.gross),
-        pct(variancePct(d.this?.gross, d.last?.gross)) + "%",
-      ]),
-      styles: { fontSize: 8 },
-    });
+        moneyPDF(g.gratuity9),
+        moneyPDF(g.eatIn35),
+      ];
+    }),
 
-    doc.save("sales-report.pdf");
-  };
+    styles: { fontSize: 8 },
+  });
+
+  /* ================= DAY TITLE (FIXED POSITION) ================= */
+
+  const dayStartY = doc.lastAutoTable.finalY + 15;
+
+  doc.text("Sales Report - Day Performance", 14, dayStartY);
+
+  autoTable(doc, {
+    startY: dayStartY + 5,
+
+    head: [
+      [
+        { content: "Day", rowSpan: 2 },
+        { content: "Net Sales", colSpan: 3 },
+        { content: "Gross Sales", colSpan: 3 },
+      ],
+      [
+        "Current",
+        "Previous",
+        "Variance%",
+        "Current",
+        "Previous",
+        "Variance%",
+      ],
+    ],
+
+    body: days.map((d) => [
+      d.day,
+
+      moneyPDF(d.this?.net),
+      moneyPDF(d.last?.net),
+      pctPDF(variancePct(d.this?.net, d.last?.net)) + "%",
+
+      moneyPDF(d.this?.gross),
+      moneyPDF(d.last?.gross),
+      pctPDF(variancePct(d.this?.gross, d.last?.gross)) + "%",
+    ]),
+
+    styles: { fontSize: 8 },
+  });
+
+  doc.save("sales-report.pdf");
+};
 
   /* =========================
      LOADING
   ========================= */
 
   if (loading) {
-    return <div className="wrm-sales">Loading...</div>;
+    return (
+      <div className="wrm-sales">
+        {/* HEADER SKELETON */}
+        <div className="header-bar">
+          <div className="skeleton" style={{ width: 160, height: 20 }} />
+
+          <div className="export-buttons">
+            <div className="skeleton" style={{ width: 110, height: 32 }} />
+            <div className="skeleton" style={{ width: 110, height: 32 }} />
+          </div>
+        </div>
+
+        {/* SITE TABLE SKELETON */}
+        <div className="table-card">
+          <div
+            className="skeleton"
+            style={{ width: 140, height: 18, marginBottom: 12 }}
+          />
+
+          <table className="wrm-table">
+            <thead>
+              <tr>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <th key={i}>
+                    <div
+                      className="skeleton"
+                      style={{ height: 12, width: "70%" }}
+                    />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 8 }).map((_, j) => (
+                    <td key={j}>
+                      <div
+                        className="skeleton"
+                        style={{ height: 12, width: "80%" }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* DAY TABLE SKELETON */}
+        <div className="table-card">
+          <div
+            className="skeleton"
+            style={{ width: 140, height: 18, marginBottom: 12 }}
+          />
+
+          <table className="wrm-table">
+            <thead>
+              <tr>
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <th key={i}>
+                    <div
+                      className="skeleton"
+                      style={{ height: 12, width: "70%" }}
+                    />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 7 }).map((_, j) => (
+                    <td key={j}>
+                      <div
+                        className="skeleton"
+                        style={{ height: 12, width: "75%" }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
   }
 
   /* =========================
-     RENDER
+     UI
   ========================= */
 
   return (
@@ -244,24 +391,15 @@ export default function Sales() {
         <h1>Sales Report</h1>
 
         <div className="export-buttons">
-          <button
-            className="wrm-btn wrm-btn-primary"
-            onClick={exportExcel}
-            disabled={exporting}
-          >
+          <button className="wrm-btn wrm-btn-primary" onClick={exportExcel} disabled={exporting}>
             {exporting ? "Exporting..." : "Export Excel"}
           </button>
 
-          <button className="wrm-btn wrm-btn-secondary" onClick={exportPDF}>
-            Export PDF
-          </button>
+          <button className="wrm-btn wrm-btn-secondary" onClick={exportPDF}>Export PDF</button>
         </div>
       </div>
 
-      {/* =========================
-          SITE PERFORMANCE
-      ========================= */}
-
+      {/* SITE TABLE */}
       <div className="table-card">
         <h2>Site Performance</h2>
 
@@ -273,7 +411,6 @@ export default function Sales() {
               <th colSpan="3">Gross Sales</th>
               <th colSpan="4">VAT / GRATUITY</th>
             </tr>
-
             <tr>
               <th>Current</th>
               <th>Previous</th>
@@ -285,8 +422,8 @@ export default function Sales() {
 
               <th>VAT</th>
               <th>VAT%</th>
-              <th>Gratuity</th>
-              <th>Eat in Charge</th>
+              <th>Grat</th>
+              <th>Eat</th>
             </tr>
           </thead>
 
@@ -341,23 +478,25 @@ export default function Sales() {
         </table>
       </div>
 
-      {/* =========================
-          DAY PERFORMANCE
-      ========================= */}
-
+      {/* DAY TABLE */}
       <div className="table-card">
         <h2>Day Performance</h2>
 
         <table className="wrm-table">
           <thead>
             <tr>
-              <th>Day</th>
-              <th>Net C</th>
-              <th>Net P</th>
-              <th>Net Var%</th>
-              <th>Gross C</th>
-              <th>Gross P</th>
-              <th>Gross Var%</th>
+              <th rowSpan="2">Day</th>
+              <th colSpan="3">Net Sales</th>
+              <th colSpan="3">Gross Sales</th>
+            </tr>
+            <tr>
+              <th>Current</th>
+              <th>Previous</th>
+              <th>Variance%</th>
+
+              <th>Current</th>
+              <th>Previous</th>
+              <th>Variance%</th>
             </tr>
           </thead>
 

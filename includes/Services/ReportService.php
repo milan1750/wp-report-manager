@@ -1627,8 +1627,28 @@ class ReportService {
 			"A{$row}"
 		);
 
+		$sheet->getStyle( "A{$row}:G{$row}" )
+				->applyFromArray(
+					array(
+						'font'    => array(
+							'bold' => true,
+							'size' => 10,
+						),
+						'borders' => array(
+							'allBorders' => array(
+								'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+							),
+						),
+					)
+				);
+
 		$site_end = $row;
-		$row     += 2;
+
+		$sheet->getStyle( "B{$start_site}:K{$site_end}" )
+		->getNumberFormat()
+		->setFormatCode( '#,##0.00' );
+
+		$row += 3;
 
 		// ================= DAY PERFORMANCE =================
 		$sheet->setCellValue( "A{$row}", 'Day Performance' );
@@ -1636,22 +1656,43 @@ class ReportService {
 
 		++$row;
 		$site_start_day = $row;
+		$sheet->setCellValue( "A{$row}", 'Day' );
+		$sheet->setCellValue( "B{$row}", 'Net Sales' );
+		$sheet->setCellValue( "E{$row}", 'Gross Sales' );
 
 		$sheet->fromArray(
 			array(
-				'Day',
-				'Net C',
-				'Net P',
-				'Net var % ',
-				'Gross C',
-				'Gross P',
-				'Gross var % ',
+				'',
+				'Current',
+				'Previous',
+				'variance % ',
+				'Current',
+				'Previous',
+				'Variance % ',
 			),
 			null,
-			"A{$row}"
+			'A' . ( $row + 1 )
 		);
 
-		++$row;
+		$sheet->mergeCells( "A{$row}:A" . ( $row + 1 ) );
+		$sheet->mergeCells( "B{$row}:D{$row}" );
+		$sheet->mergeCells( "E{$row}:G{$row}" );
+		$sheet->getStyle( "A{$row}:G" . ( $row + 1 ) )
+				->applyFromArray(
+					array(
+						'font'    => array(
+							'bold' => true,
+							'size' => 10,
+						),
+						'borders' => array(
+							'allBorders' => array(
+								'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+							),
+						),
+					)
+				);
+
+		$row           += 2;
 		$day_data_start = $row;
 
 		$days = array( 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' );
@@ -1746,6 +1787,10 @@ class ReportService {
 
 		$day_end = $row;
 
+		$sheet->getStyle( "B{$site_start_day}:G{$day_end}" )
+		->getNumberFormat()
+		->setFormatCode( '#,##0.00' );
+
 		// DAY TOTAL FIXED.
 		$sheet->fromArray(
 			array(
@@ -1760,6 +1805,21 @@ class ReportService {
 			null,
 			"A{$row}"
 		);
+
+				$sheet->getStyle( "A{$row}:G{$row}" )
+				->applyFromArray(
+					array(
+						'font'    => array(
+							'bold' => true,
+							'size' => 10,
+						),
+						'borders' => array(
+							'allBorders' => array(
+								'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+							),
+						),
+					)
+				);
 
 		// ================= BORDERS =================
 		$sheet->getStyle( "A2:K{$site_end}" )

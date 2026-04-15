@@ -24,6 +24,8 @@ export default function DailySalesSimple() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+	const [flatExporting, setFlatExporting] = useState(false);
+
 
   /* =========================
      FETCH
@@ -132,7 +134,7 @@ export default function DailySalesSimple() {
     const api = window.WRM_API;
     if (!api?.url || exporting) return;
 
-    setExporting(true);
+    setFlatExporting(true);
 
     try {
       const params = new URLSearchParams({
@@ -178,7 +180,7 @@ export default function DailySalesSimple() {
 
       window.URL.revokeObjectURL(url);
     } finally {
-      setExporting(false);
+      setFlatExporting(false);
     }
   };
 
@@ -303,7 +305,7 @@ export default function DailySalesSimple() {
           onClick={exportFlatExcel}
           disabled={exporting}
         >
-          {exporting ? (
+          {flatExporting ? (
             <>
               <span className="wrm-spinner" />
               Exporting...
