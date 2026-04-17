@@ -87,10 +87,158 @@ class WeekService {
 		}
 
 		return array(
-			'year'           => $year,
-			'week_start_day' => $week_start_day,
-			'current_week'   => $current_week,
-			'weeks'          => $weeks,
+			'year'             => $year,
+			'week_start_day'   => $week_start_day,
+			'current_week'     => $current_week,
+			'weeks'            => $weeks,
+
+			// 🔥 NEW: FULL ANALYTICS SYSTEM
+			'range_presets'    => self::get_range_presets( $week_start_day ),
+			'interval_presets' => self::get_interval_presets(),
+		);
+	}
+
+	private static function get_range_presets( int $week_start_day ): array {
+
+		$today = new \DateTime( 'now' );
+
+		$format = fn( $d ) => $d->format( 'Y-m-d' );
+
+		// WEEK LOGIC (RESPECTS week_start_day)
+		$startOfWeek = self::get_week_start( $today, $week_start_day );
+		$endOfWeek   = ( clone $startOfWeek )->modify( '+6 days' );
+
+		$startLastWeek = ( clone $startOfWeek )->modify( '-7 days' );
+		$endLastWeek   = ( clone $endOfWeek )->modify( '-7 days' );
+
+		$startMonth = ( clone $today )->modify( 'first day of this month' );
+		$endMonth   = clone $today;
+
+		$startLastMonth = ( clone $today )->modify( 'first day of last month' );
+		$endLastMonth   = ( clone $today )->modify( 'last day of last month' );
+
+		$startYear     = ( clone $today )->modify( 'first day of january this year' );
+		$startLastYear = ( clone $today )->modify( 'first day of january last year' );
+		$endLastYear   = ( clone $today )->modify( 'last day of december last year' );
+
+		return array(
+			array(
+				'key'   => 'today',
+				'label' => 'Today',
+				'from'  => $format( $today ),
+				'to'    => $format( $today ),
+			),
+			array(
+				'key'   => 'yesterday',
+				'label' => 'Yesterday',
+				'from'  => $format( ( clone $today )->modify( '-1 day' ) ),
+				'to'    => $format( ( clone $today )->modify( '-1 day' ) ),
+			),
+			array(
+				'key'   => 'this_week',
+				'label' => 'This Week',
+				'from'  => $format( $startOfWeek ),
+				'to'    => $format( $endOfWeek ),
+			),
+			array(
+				'key'   => 'last_week',
+				'label' => 'Last Week',
+				'from'  => $format( $startLastWeek ),
+				'to'    => $format( $endLastWeek ),
+			),
+			array(
+				'key'   => 'last_7_days',
+				'label' => 'Last 7 Days',
+				'from'  => $format( ( clone $today )->modify( '-7 days' ) ),
+				'to'    => $format( $today ),
+			),
+			array(
+				'key'   => 'last_28_days',
+				'label' => 'Last 28 Days',
+				'from'  => $format( ( clone $today )->modify( '-28 days' ) ),
+				'to'    => $format( $today ),
+			),
+			array(
+				'key'   => 'this_month',
+				'label' => 'This Month',
+				'from'  => $format( $startMonth ),
+				'to'    => $format( $today ),
+			),
+			array(
+				'key'   => 'last_month',
+				'label' => 'Last Month',
+				'from'  => $format( $startLastMonth ),
+				'to'    => $format( $endLastMonth ),
+			),
+			array(
+				'key'   => 'this_year',
+				'label' => 'This Year',
+				'from'  => $format( $startYear ),
+				'to'    => $format( $today ),
+			),
+			array(
+				'key'   => 'last_year',
+				'label' => 'Last Year',
+				'from'  => $format( $startLastYear ),
+				'to'    => $format( $endLastYear ),
+			),
+			array(
+				'key'   => 'all_time',
+				'label' => 'All Time',
+				'from'  => '2020-01-01',
+				'to'    => $format( $today ),
+			),
+		);
+	}
+
+	private static function get_week_start( \DateTime $date, int $week_start_day ): \DateTime {
+
+		$dayOfWeek = (int) $date->format( 'w' ); // 0=Sun
+
+		$diff = $dayOfWeek - $week_start_day;
+
+		if ( $diff < 0 ) {
+			$diff += 7;
+		}
+
+		$start = clone $date;
+		$start->modify( "-{$diff} days" );
+
+		// reset time
+		$start->setTime( 0, 0, 0 );
+
+		return $start;
+	}
+
+	private static function get_interval_presets(): array {
+
+		$today     = new \DateTime( 'today' );
+		$yesterday = new \DateTime( 'yesterday' );
+
+		$same_last_month = ( clone $today )->modify( '-1 month' );
+		$same_last_year  = ( clone $today )->modify( '-1 year' );
+
+		return array(
+			array(
+				'key'   => 'today',
+				'label' => 'Today',
+				'value' => $today->format( 'Y-m-d' ),
+			),
+			array(
+				'key'   => 'yesterday',
+				'label' => 'Yesterday',
+				'value' => $yesterday->format( 'Y-m-d' ),
+			),
+			array(
+				'key'   => 'same_last_month',
+				'label' => 'Same Date Last Month',
+				'value' => $same_last_month->format( 'Y-m-d' ),
+			),
+			array(
+				'key'   => 'same_last_year',
+				'label' => 'Same Date Last Year',
+				'value' => $same_last_year->format( 'Y-m-d' ),
+			),
 		);
 	}
 

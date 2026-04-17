@@ -1,10 +1,6 @@
-import { useContext, useEffect, useState, useMemo } from "@wordpress/element";
-import { FilterContext } from "../App";
+import { useContext, useEffect, useMemo, useState } from "@wordpress/element";
+import { FilterContext } from "../contexts";
 import React from "react";
-
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 /* =========================
    HELPERS
@@ -29,6 +25,16 @@ export default function Items() {
   const [loading, setLoading] = useState(true);
 
   /* =========================
+     NORMALISE DATE (IMPORTANT FIX)
+  ========================= */
+
+  const from = filters.range?.from || filters.from || "";
+  const to = filters.range?.to || filters.to || "";
+
+  const entity = filters.entity;
+  const site = filters.site;
+
+  /* =========================
      FETCH
   ========================= */
 
@@ -39,10 +45,12 @@ export default function Items() {
     setLoading(true);
 
     const params = new URLSearchParams({
-      from: filters.from,
-      to: filters.to,
-      site: filters.site || "",
+      from,
+      to,
     });
+
+    if (entity && entity !== "all") params.append("entity", entity);
+    if (site && site !== "all") params.append("site", site);
 
     fetch(`${api.url}reports/items?${params.toString()}`, {
       headers: { "X-WP-Nonce": api.nonce },
@@ -50,7 +58,7 @@ export default function Items() {
       .then((res) => res.json())
       .then(setData)
       .finally(() => setLoading(false));
-  }, [filters]);
+  }, [from, to, entity, site]);
 
   /* =========================
      SAFE DATA
@@ -62,11 +70,16 @@ export default function Items() {
   const days = data?.days || [];
 
   /* =========================
-     DERIVED TOTALS
+     KPI (LIKE DASHBOARD)
   ========================= */
 
   const totalGross = useMemo(
     () => sites.reduce((a, b) => a + num(b?.gross), 0),
+    [sites]
+  );
+
+  const totalNet = useMemo(
+    () => sites.reduce((a, b) => a + num(b?.net), 0),
     [sites]
   );
 
@@ -75,78 +88,10 @@ export default function Items() {
     [sites]
   );
 
-  /* =========================
-     EXPORT EXCEL
-  ========================= */
-
-  const exportExcel = () => {
-    const wb = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(sites),
-      "Sites"
-    );
-
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(categories),
-      "Categories"
-    );
-
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(items),
-      "Items"
-    );
-
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(days),
-      "Days"
-    );
-
-    XLSX.writeFile(wb, "items-report.xlsx");
-  };
-
-  /* =========================
-     EXPORT PDF
-  ========================= */
-
-  const exportPDF = () => {
-    const doc = new jsPDF();
-
-    doc.text("Items Report", 14, 10);
-
-    autoTable(doc, {
-      startY: 20,
-      head: [["Site", "Qty", "Gross", "Net", "Discount", "Tax"]],
-      body: sites.map((s) => [
-        s.site_name,
-        num(s.total_qty).toFixed(2),
-        money(s.gross),
-        money(s.net),
-        money(s.discount),
-        money(s.tax),
-      ]),
-    });
-
-    doc.addPage();
-    doc.text("Top Items", 14, 10);
-
-    autoTable(doc, {
-      startY: 20,
-      head: [["Item", "Qty", "Gross", "Tax"]],
-      body: items.map((i) => [
-        i.item_title,
-        num(i.total_qty).toFixed(2),
-        money(i.gross),
-        money(i.tax),
-      ]),
-    });
-
-    doc.save("items-report.pdf");
-  };
+  const totalTax = useMemo(
+    () => sites.reduce((a, b) => a + num(b?.tax), 0),
+    [sites]
+  );
 
   /* =========================
      LOADING
@@ -154,7 +99,7 @@ export default function Items() {
 
   if (loading) {
     return (
-      <div className="wrm-sales">
+      <div className="sales">
         <div className="header-bar">
           <div className="skeleton" style={{ width: 160, height: 20 }} />
           <div className="export-buttons">
@@ -164,25 +109,18 @@ export default function Items() {
         </div>
 
         <div className="table-card">
-          <div className="skeleton" style={{ width: 140, height: 18, marginBottom: 12 }} />
+          <div
+            className="skeleton"
+            style={{ width: 140, height: 18, marginBottom: 12 }}
+          />
 
-          <table className="wrm-table">
-            <thead>
-              <tr>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <th key={i}>
-                    <div className="skeleton" style={{ height: 12, width: "70%" }} />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
+          <table className="table">
             <tbody>
               {Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
                   {Array.from({ length: 6 }).map((_, j) => (
                     <td key={j}>
-                      <div className="skeleton" style={{ height: 12, width: "80%" }} />
+                      <div className="skeleton" style={{ height: 12 }} />
                     </td>
                   ))}
                 </tr>
@@ -200,7 +138,7 @@ export default function Items() {
 
   if (!sites.length && !items.length) {
     return (
-      <div className="wrm-sales">
+      <div className="sales">
         <div className="table-card" style={{ textAlign: "center", padding: 30 }}>
           <h2>No Items Data</h2>
         </div>
@@ -213,52 +151,35 @@ export default function Items() {
   ========================= */
 
   return (
-    <div className="wrm-sales">
+    <div className="sales">
 
       {/* HEADER */}
       <div className="header-bar">
         <h1>Items Report</h1>
-
-        <div className="export-buttons">
-          <button className="wrm-btn wrm-btn-primary" onClick={exportExcel}>
-            Export Excel
-          </button>
-
-          <button className="wrm-btn wrm-btn-secondary" onClick={exportPDF}>
-            Export PDF
-          </button>
-        </div>
       </div>
 
-      {/* KPI */}
-      <div className="wrm-cards">
-        <div className="card">
-          <h4>Total Sites</h4>
-          <p>{sites.length}</p>
-        </div>
-
-        <div className="card">
-          <h4>Total Qty</h4>
-          <p>{num(totalQty).toFixed(2)}</p>
-        </div>
-
-        <div className="card">
-          <h4>Total Gross</h4>
-          <p>{money(totalGross)}</p>
-        </div>
-
-        <div className="card">
-          <h4>Total Items</h4>
-          <p>{items.length}</p>
-        </div>
+      {/* ================= KPI (FIXED LIKE DASHBOARD) ================= */}
+      <div className="kpi">
+        {[
+          ["Sites", sites.length],
+          ["Qty", num(totalQty).toFixed(2)],
+          ["Gross", `£${money(totalGross)}`],
+          ["Net", `£${money(totalNet)}`],
+          ["Tax", `£${money(totalTax)}`],
+        ].map(([label, value]) => (
+          <div className="kpi__card" key={label}>
+            <h4>{label}</h4>
+            <p>{value}</p>
+          </div>
+        ))}
       </div>
 
-      {/* SITES TABLE */}
+      {/* ================= SITES TABLE ================= */}
       {sites.length > 0 && (
         <div className="table-card">
           <h2>Sites</h2>
 
-          <table className="wrm-table">
+          <table className="table">
             <thead>
               <tr>
                 <th>Site</th>
@@ -286,12 +207,12 @@ export default function Items() {
         </div>
       )}
 
-      {/* TOP ITEMS */}
+      {/* ================= TOP ITEMS ================= */}
       {items.length > 0 && (
         <div className="table-card">
           <h2>Top Items</h2>
 
-          <table className="wrm-table">
+          <table className="table">
             <thead>
               <tr>
                 <th>Item</th>
@@ -314,6 +235,7 @@ export default function Items() {
           </table>
         </div>
       )}
+
     </div>
   );
 }

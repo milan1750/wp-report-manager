@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState, useRef } from "@wordpress/element";
-import { FilterContext } from "../App";
+import { FilterContext } from "../contexts";
 import axios from "axios";
 
 export default function Data() {

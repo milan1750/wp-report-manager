@@ -1,6 +1,7 @@
 import { createElement } from "@wordpress/element";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+
 import "../assets/css/style.scss";
 
 const root = document.getElementById("wrm-root");

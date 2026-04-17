@@ -6,6 +6,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use Dompdf\Dompdf;
+use Dompdf\Options;
+
 /**
  * Report Service
  *
@@ -68,10 +71,10 @@ class ReportService {
 		$user_id       = get_current_user_id();
 
 		foreach ( $all_sites as $s ) {
-			if ( $entity !== 'all' && $s->entity_id != $entity ) {
+			if ( 'all' !== $entity && $entity !== $s->entity_id ) {
 				continue;
 			}
-			if ( $site !== 'all' && $s->site_id != $site ) {
+			if ( 'all' !== $site && $site !== $s->site_id ) {
 				continue;
 			}
 
@@ -233,6 +236,13 @@ class ReportService {
 		);
 	}
 
+	/**
+	 * Items.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param \WP_Request $request Request.
+	 */
 	public static function items( $request ) {
 		global $wpdb;
 
@@ -264,11 +274,11 @@ class ReportService {
 
 		foreach ( $all_sites as $s ) {
 
-			if ( $entity !== 'all' && $s->entity_id != $entity ) {
+			if ( 'all' !== $entity && $entity !== $s->entity_id ) {
 				continue;
 			}
 
-			if ( $site !== 'all' && $s->site_id != $site ) {
+			if ( 'all' !== $site && $site !== $s->site_id ) {
 				continue;
 			}
 
@@ -458,6 +468,829 @@ class ReportService {
 		);
 	}
 
+	public static function items_interval( $request ) {
+		global $wpdb;
+
+		$t = $wpdb->prefix . 'wrm_transaction_items';
+
+		$interval = max( 1, intval( $request['interval'] ?? 60 ) );
+
+		$entity = $request['entity'] ?? 'all';
+		$site   = $request['site'] ?? 'all';
+
+		$a = $request['interval_a'] ?? gmdate( 'Y-m-d' );
+		$b = $request['interval_b'] ?? gmdate( 'Y-m-d' );
+
+		$is_same = ( $a === $b );
+
+		$from = $a . ' 00:00:00';
+		$to   = $a . ' 23:59:59';
+
+		$cmp_from = $b . ' 00:00:00';
+		$cmp_to   = $b . ' 23:59:59';
+
+		$seconds = $interval * 60;
+
+		/*
+		=========================
+			SITES + PERMISSION FIX
+		========================= */
+
+		$permissions = wpac()->permissions();
+		$all_sites   = wpac()->sites()->all();
+
+		$allowed_sites = array();
+
+		foreach ( $all_sites as $s ) {
+
+			if ( $entity !== 'all' && (int) $entity !== (int) $s->entity_id ) {
+				continue;
+			}
+
+			if ( $site !== 'all' && (int) $site !== (int) $s->site_id ) {
+				continue;
+			}
+
+			$context = array(
+				'entity_id' => $s->entity_id,
+				'site_id'   => $s->site_id,
+			);
+
+			if ( ! $permissions->can( 'wrm_view_items', $context ) ) {
+				continue;
+			}
+
+			$allowed_sites[] = (int) $s->site_id;
+		}
+
+		if ( empty( $allowed_sites ) ) {
+			return array(
+				'interval' => $interval,
+				'slots'    => array(),
+				'items'    => array(),
+			);
+		}
+
+		$ids         = implode( ',', array_map( 'intval', $allowed_sites ) );
+		$where_sites = " AND site_id IN ($ids) AND voided != 1";
+
+		/*
+		=========================
+			SQL
+		========================= */
+
+		$sql = "
+			SELECT
+				item_title,
+				FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(added_datetime)/%d)*%d) AS bucket,
+				SUM(quantity) AS qty
+			FROM $t
+			WHERE added_datetime BETWEEN %s AND %s
+			$where_sites
+			GROUP BY item_title, bucket
+		";
+
+		$this_rows = $wpdb->get_results(
+			$wpdb->prepare( $sql, $seconds, $seconds, $from, $to ),
+			ARRAY_A
+		);
+
+		$last_rows = array();
+
+		if ( ! $is_same ) {
+			$last_rows = $wpdb->get_results(
+				$wpdb->prepare( $sql, $seconds, $seconds, $cmp_from, $cmp_to ),
+				ARRAY_A
+			);
+		}
+
+		/*
+		=========================
+			BUILD DATA
+		========================= */
+
+		$items    = array();
+		$slot_set = array();
+
+		// 🔥 FIXED NORMALIZER (REAL 30/60 MIN SUPPORT)
+		$normalize = function ( $bucket ) use ( $interval ) {
+
+			$ts = strtotime( $bucket );
+			if ( ! $ts ) {
+				return '00:00';
+			}
+
+			$minutes = (int) date( 'i', $ts );
+			$rounded = floor( $minutes / $interval ) * $interval;
+
+			return date( 'H', $ts ) . ':' . str_pad( $rounded, 2, '0', STR_PAD_LEFT );
+		};
+
+		$process = function ( $rows, $key ) use ( &$items, &$slot_set, $normalize ) {
+
+			foreach ( $rows as $r ) {
+
+				$item = $r['item_title'];
+				$slot = $normalize( $r['bucket'] );
+
+				$slot_set[ $slot ] = true;
+
+				if ( ! isset( $items[ $item ] ) ) {
+					$items[ $item ] = array(
+						'item_title' => $item,
+						'slots'      => array(),
+						'row_total'  => array(
+							'this' => 0,
+							'last' => 0,
+						),
+					);
+				}
+
+				if ( ! isset( $items[ $item ]['slots'][ $slot ] ) ) {
+					$items[ $item ]['slots'][ $slot ] = array(
+						'this' => 0,
+						'last' => 0,
+					);
+				}
+
+				$items[ $item ]['slots'][ $slot ][ $key ] += (float) $r['qty'];
+				$items[ $item ]['row_total'][ $key ]      += (float) $r['qty'];
+			}
+		};
+
+		$process( $this_rows, 'this' );
+		$process( $last_rows, 'last' );
+
+		ksort( $slot_set );
+
+		/*
+		=========================
+		NORMALIZE EMPTY + TOTALS
+		========================= */
+
+		$column_totals = array();
+
+		foreach ( $items as &$item ) {
+
+			foreach ( $slot_set as $slot => $_ ) {
+
+				if ( ! isset( $item['slots'][ $slot ] ) ) {
+					$item['slots'][ $slot ] = array(
+						'this' => 0,
+						'last' => 0,
+					);
+				}
+
+				$column_totals[ $slot ]['this'] =
+				( $column_totals[ $slot ]['this'] ?? 0 ) +
+				$item['slots'][ $slot ]['this'];
+
+				$column_totals[ $slot ]['last'] =
+				( $column_totals[ $slot ]['last'] ?? 0 ) +
+				$item['slots'][ $slot ]['last'];
+			}
+
+			ksort( $item['slots'] );
+		}
+
+		/*
+		=========================
+		SORT
+		========================= */
+
+		usort(
+			$items,
+			fn( $a, $b ) =>
+			$b['row_total']['this'] <=> $a['row_total']['this']
+		);
+
+		/*
+		=========================
+			RETURN
+		========================= */
+
+		return array(
+			'interval'      => $interval,
+			'slots'         => array_keys( $slot_set ),
+			'items'         => array_values( $items ),
+			'column_totals' => $column_totals,
+		);
+	}
+
+	public static function items_interval_excel( $request ) {
+		global $wpdb;
+
+		$t = $wpdb->prefix . 'wrm_transaction_items';
+
+		$interval = max( 1, intval( $request['interval'] ?? 60 ) );
+
+		$entity = $request['entity'] ?? 'all';
+		$site   = $request['site'] ?? 'all';
+
+		$a = $request['interval_a'] ?? gmdate( 'Y-m-d' );
+		$b = $request['interval_b'] ?? gmdate( 'Y-m-d' );
+
+		$is_same = ( $a === $b );
+
+		$from = $a . ' 00:00:00';
+		$to   = $a . ' 23:59:59';
+
+		$cmp_from = $b . ' 00:00:00';
+		$cmp_to   = $b . ' 23:59:59';
+
+		$seconds = $interval * 60;
+
+		/*
+		=========================
+		ENTITY + SITE FILTER
+		========================= */
+
+		$entities    = wpac()->entities()->all();
+		$all_sites   = wpac()->sites()->all();
+		$permissions = wpac()->permissions();
+
+		$entity_map = array();
+		foreach ( $entities as $e ) {
+			$entity_map[ $e->id ] = $e->name;
+		}
+
+		$allowed_sites = array();
+		$site_name_map = array();
+
+		foreach ( $all_sites as $s ) {
+
+			if ( $entity !== 'all' && (int) $s->entity_id !== (int) $entity ) {
+				continue;
+			}
+			if ( $site !== 'all' && (int) $s->site_id !== (int) $site ) {
+				continue;
+			}
+
+			$context = array(
+				'entity_id' => $s->entity_id,
+				'site_id'   => $s->site_id,
+			);
+
+			if ( ! $permissions->can( 'wrm_view_items', $context ) ) {
+				continue;
+			}
+
+			$allowed_sites[] = (int) $s->site_id;
+
+			$entity_name = $entity_map[ $s->entity_id ] ?? '';
+			$short       = explode( ' ', trim( $entity_name ) )[0] ?? '';
+
+			$site_name_map[ $s->site_id ] =
+			trim( $short . ' ' . ( $s->name ?? $s->site_title ?? '' ) );
+		}
+
+		if ( empty( $allowed_sites ) ) {
+			exit;
+		}
+
+		uasort( $site_name_map, fn( $a, $b ) => strcasecmp( $a, $b ) );
+
+		$ids   = implode( ',', array_map( 'intval', $allowed_sites ) );
+		$where = " AND site_id IN ($ids) AND voided != 1";
+
+		/*
+		=========================
+		FETCH DATA
+		========================= */
+
+		$sql = "
+			SELECT item_title,
+			FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(added_datetime)/%d)*%d) AS bucket,
+			SUM(quantity) AS qty
+			FROM $t
+			WHERE added_datetime BETWEEN %s AND %s
+			$where
+			GROUP BY item_title, bucket
+		";
+
+		$this_rows = $wpdb->get_results(
+			$wpdb->prepare( $sql, $seconds, $seconds, $from, $to ),
+			ARRAY_A
+		);
+
+		$last_rows = $is_same ? array() : $wpdb->get_results(
+			$wpdb->prepare( $sql, $seconds, $seconds, $cmp_from, $cmp_to ),
+			ARRAY_A
+		);
+
+		/*
+		=========================
+		BUILD DATA
+		========================= */
+
+		$items = array();
+		$slots = array();
+
+		$normalize = function ( $bucket ) {
+			$ts = strtotime( $bucket );
+			return $ts ? date( 'H:i', $ts ) : '00:00';
+		};
+
+		$process = function ( $rows, $key ) use ( &$items, &$slots, $normalize ) {
+
+			foreach ( $rows as $r ) {
+
+				$item = $r['item_title'];
+				$slot = $normalize( $r['bucket'] );
+
+				$slots[ $slot ] = true;
+
+				if ( ! isset( $items[ $item ] ) ) {
+					$items[ $item ] = array(
+						'item'       => $item,
+						'slots'      => array(),
+						'total_this' => 0,
+						'total_last' => 0,
+					);
+				}
+
+				if ( ! isset( $items[ $item ]['slots'][ $slot ] ) ) {
+					$items[ $item ]['slots'][ $slot ] = array(
+						'this' => 0,
+						'last' => 0,
+					);
+				}
+
+				$items[ $item ]['slots'][ $slot ][ $key ] += (float) $r['qty'];
+				$items[ $item ][ 'total_' . $key ]        += (float) $r['qty'];
+			}
+		};
+
+		$process( $this_rows, 'this' );
+		$process( $last_rows, 'last' );
+
+		ksort( $slots );
+		usort( $items, fn( $a, $b ) => $b['total_this'] <=> $a['total_this'] );
+
+		/*
+		=========================
+		EXCEL INIT
+		========================= */
+
+		$spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+		$sheet       = $spreadsheet->getActiveSheet();
+		$sheet->setTitle( 'Items Interval' );
+
+		/*
+		=========================
+		TITLE
+		========================= */
+
+		/*
+		=========================
+		TITLE
+		========================= */
+
+		$title = 'Item Sales Report - ' . date( 'd/m/Y', strtotime( $a ) );
+
+		if ( ! $is_same ) {
+			$title .= ' Vs ' . date( 'd/m/Y', strtotime( $b ) );
+		}
+
+		/* 👉 ADD SITE NAME IF FILTERED */
+		if ( $site !== 'all' ) {
+
+			$site_name = $site_name_map[ (int) $site ] ?? null;
+
+			if ( $site_name ) {
+				$title .= ' (' . $site_name . ')';
+			}
+		}
+
+		$sheet->setCellValue( 'A1', $title );
+		$sheet->mergeCells( 'A1:Z1' );
+
+		$sheet->getStyle( 'A1' )->applyFromArray(
+			array(
+				'font'      => array(
+					'bold' => true,
+					'size' => 14,
+				),
+				'alignment' => array( 'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER ),
+			)
+		);
+
+		/*
+		=========================
+		HEADER
+		========================= */
+
+		$row = 3;
+		$sheet->setCellValue( "A{$row}", 'Item' );
+
+		$col = 2;
+
+		foreach ( $slots as $slot => $_ ) {
+
+			$c1 = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex( $col );
+
+			if ( $is_same ) {
+
+				$sheet->setCellValue( $c1 . $row, $slot );
+				$sheet->setCellValue( $c1 . ( $row + 1 ), 'T' );
+				$sheet->mergeCells( "$c1$row:$c1" . ( $row + 1 ) );
+
+				++$col;
+
+			} else {
+
+				$c2 = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex( $col + 1 );
+
+				$sheet->setCellValue( $c1 . $row, $slot );
+				$sheet->mergeCells( "$c1$row:$c2$row" );
+
+				$sheet->setCellValue( $c1 . ( $row + 1 ), 'T' );
+				$sheet->setCellValue( $c2 . ( $row + 1 ), 'L' );
+
+				$col += 2;
+			}
+		}
+
+		/*
+		=========================
+		TOTAL
+		========================= */
+
+		$totalA = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex( $col );
+
+		if ( $is_same ) {
+
+			$sheet->setCellValue( $totalA . $row, 'Total' );
+			$sheet->mergeCells( "$totalA$row:$totalA" . ( $row + 1 ) );
+
+		} else {
+
+			$totalB = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex( $col + 1 );
+
+			$sheet->setCellValue( $totalA . $row, 'Total' );
+			$sheet->mergeCells( "$totalA$row:$totalB$row" );
+
+			$sheet->setCellValue( $totalA . ( $row + 1 ), 'T' );
+			$sheet->setCellValue( $totalB . ( $row + 1 ), 'L' );
+		}
+
+		/*
+		=========================
+		DATA
+		========================= */
+
+		$dataStart = $row + 2;
+		$r         = $dataStart;
+
+		foreach ( $items as $item ) {
+
+			$rowData = array( $item['item'] );
+
+			foreach ( $slots as $slot => $_ ) {
+
+				if ( $is_same ) {
+					$rowData[] = $item['slots'][ $slot ]['this'] ?? 0;
+				} else {
+					$rowData[] = $item['slots'][ $slot ]['this'] ?? 0;
+					$rowData[] = $item['slots'][ $slot ]['last'] ?? 0;
+				}
+			}
+
+			$rowData[] = $item['total_this'];
+
+			if ( ! $is_same ) {
+				$rowData[] = $item['total_last'];
+			}
+
+			$sheet->fromArray( $rowData, null, "A$r" );
+			++$r;
+		}
+
+		$lastRow = $r - 1;
+		$lastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex( $col + ( $is_same ? 0 : 1 ) );
+
+		/*
+		=========================
+		BORDER (FIXED)
+		========================= */
+
+		$tableRange = "A{$row}:{$lastCol}{$lastRow}";
+
+		$sheet->getStyle( $tableRange )->applyFromArray(
+			array(
+				'borders' => array(
+					'allBorders' => array(
+						'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+						'color'       => array( 'rgb' => '000000' ),
+					),
+				),
+			)
+		);
+
+		/*
+		=========================
+		ALIGNMENT
+		========================= */
+
+		$sheet->getStyle( $tableRange )->getAlignment()
+		->setHorizontal( \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER )
+		->setVertical( \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER );
+
+		$sheet->getStyle( "A{$dataStart}:A{$lastRow}" )
+		->getAlignment()
+		->setHorizontal( \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT );
+
+		/*
+		=========================
+		OUTPUT
+		========================= */
+
+		$writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx( $spreadsheet );
+
+		header( 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' );
+		header( 'Content-Disposition: attachment; filename="items_interval.xlsx"' );
+		header( 'Cache-Control: max-age=0' );
+
+		$writer->save( 'php://output' );
+		exit;
+	}
+
+	public static function items_interval_pdf( $request ) {
+
+		global $wpdb;
+
+		$t = $wpdb->prefix . 'wrm_transaction_items';
+
+		$interval = max( 1, intval( $request['interval'] ?? 60 ) );
+
+		$entity = $request['entity'] ?? 'all';
+		$site   = $request['site'] ?? 'all';
+
+		$a = $request['interval_a'] ?? gmdate( 'Y-m-d' );
+		$b = $request['interval_b'] ?? gmdate( 'Y-m-d' );
+
+		$is_same = ( $a === $b );
+
+		$from = $a . ' 00:00:00';
+		$to   = $a . ' 23:59:59';
+
+		$cmp_from = $b . ' 00:00:00';
+		$cmp_to   = $b . ' 23:59:59';
+
+		$seconds = $interval * 60;
+
+		/*
+		=========================
+			ENTITY + SITE FILTER
+		========================= */
+
+		$entities    = wpac()->entities()->all();
+		$all_sites   = wpac()->sites()->all();
+		$permissions = wpac()->permissions();
+
+		$entity_map = array();
+		foreach ( $entities as $e ) {
+			$entity_map[ $e->id ] = $e->name;
+		}
+
+		$allowed_sites = array();
+		$site_name_map = array();
+
+		foreach ( $all_sites as $s ) {
+
+			if ( $entity !== 'all' && (int) $s->entity_id !== (int) $entity ) {
+				continue;
+			}
+			if ( $site !== 'all' && (int) $s->site_id !== (int) $site ) {
+				continue;
+			}
+
+			if ( ! $permissions->can(
+				'wrm_view_items',
+				array(
+					'entity_id' => $s->entity_id,
+					'site_id'   => $s->site_id,
+				)
+			) ) {
+				continue;
+			}
+
+			$allowed_sites[] = (int) $s->site_id;
+
+			$entity_name = $entity_map[ $s->entity_id ] ?? '';
+			$short       = explode( ' ', trim( $entity_name ) )[0] ?? '';
+
+			$site_name_map[ $s->site_id ] =
+			trim( $short . ' ' . ( $s->name ?? $s->site_title ?? '' ) );
+		}
+
+		if ( empty( $allowed_sites ) ) {
+			exit;
+		}
+
+		$ids   = implode( ',', array_map( 'intval', $allowed_sites ) );
+		$where = " AND site_id IN ($ids) AND voided != 1";
+
+		/*
+		=========================
+			FETCH DATA
+		========================= */
+
+		$sql = "
+		SELECT item_title,
+		FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(added_datetime)/%d)*%d) AS bucket,
+		SUM(quantity) AS qty
+		FROM $t
+		WHERE added_datetime BETWEEN %s AND %s
+		$where
+		GROUP BY item_title, bucket
+	";
+
+		$this_rows = $wpdb->get_results(
+			$wpdb->prepare( $sql, $seconds, $seconds, $from, $to ),
+			ARRAY_A
+		);
+
+		$last_rows = $is_same ? array() : $wpdb->get_results(
+			$wpdb->prepare( $sql, $seconds, $seconds, $cmp_from, $cmp_to ),
+			ARRAY_A
+		);
+
+		/*
+		=========================
+			BUILD DATA
+		========================= */
+
+		$items = array();
+		$slots = array();
+
+		$normalize = function ( $bucket ) {
+			$ts = strtotime( $bucket );
+			return $ts ? date( 'H:i', $ts ) : '00:00';
+		};
+
+		$process = function ( $rows, $key ) use ( &$items, &$slots, $normalize ) {
+
+			foreach ( $rows as $r ) {
+
+				$item = $r['item_title'];
+				$slot = $normalize( $r['bucket'] );
+
+				$slots[ $slot ] = true;
+
+				if ( ! isset( $items[ $item ] ) ) {
+					$items[ $item ] = array(
+						'item'       => $item,
+						'slots'      => array(),
+						'total_this' => 0,
+						'total_last' => 0,
+					);
+				}
+
+				if ( ! isset( $items[ $item ]['slots'][ $slot ] ) ) {
+					$items[ $item ]['slots'][ $slot ] = array(
+						'this' => 0,
+						'last' => 0,
+					);
+				}
+
+				$items[ $item ]['slots'][ $slot ][ $key ] += (float) $r['qty'];
+				$items[ $item ][ 'total_' . $key ]        += (float) $r['qty'];
+			}
+		};
+
+		$process( $this_rows, 'this' );
+		$process( $last_rows, 'last' );
+
+		ksort( $slots );
+		usort( $items, fn( $a, $b ) => $b['total_this'] <=> $a['total_this'] );
+
+		/*
+		=========================
+		TITLE
+		========================= */
+
+		$title = 'Item Sales Report - ' . date( 'd/m/Y', strtotime( $a ) );
+
+		if ( ! $is_same ) {
+			$title .= ' Vs ' . date( 'd/m/Y', strtotime( $b ) );
+		}
+
+		if ( $site !== 'all' ) {
+			$title .= ' (' . ( $site_name_map[ (int) $site ] ?? '' ) . ')';
+		}
+
+		/*
+		=========================
+		HTML BUILD
+		========================= */
+
+		$html = "
+	<html>
+	<head>
+	<style>
+		body { font-family: Arial; font-size: 11px; }
+		h2 { text-align:center; margin-bottom: 5px; }
+		.blank { height: 10px; }
+
+		table {
+			width: 100%;
+			border-collapse: collapse;
+		}
+
+		th, td {
+			border: 1px solid #000;
+			padding: 4px;
+			text-align: center;
+		}
+
+		th {
+			background: #f2f2f2;
+		}
+
+		td.item {
+			text-align: left;
+		}
+	</style>
+	</head>
+	<body>
+
+	<h2>{$title}</h2>
+	<div class='blank'></div>
+
+	<table>
+	<tr>
+		<th>Item</th>";
+
+		foreach ( $slots as $slot => $_ ) {
+			$html .= "<th colspan='" . ( $is_same ? 1 : 2 ) . "'>$slot</th>";
+		}
+
+		$html .= "<th colspan='" . ( $is_same ? 1 : 2 ) . "'>Total</th></tr>";
+
+		/* sub header */
+		$html .= '<tr><th></th>';
+
+		foreach ( $slots as $_ ) {
+			if ( $is_same ) {
+				$html .= '<th>T</th>';
+			} else {
+				$html .= '<th>T</th><th>L</th>';
+			}
+		}
+
+		if ( $is_same ) {
+			$html .= '<th>T</th>';
+		} else {
+			$html .= '<th>T</th><th>L</th>';
+		}
+
+		$html .= '</tr>';
+
+		/* rows */
+		foreach ( $items as $item ) {
+
+			$html .= "<tr><td class='item'>{$item['item']}</td>";
+
+			foreach ( $slots as $slot => $_ ) {
+
+				$thisVal = $item['slots'][ $slot ]['this'] ?? 0;
+				$lastVal = $item['slots'][ $slot ]['last'] ?? 0;
+
+				if ( $is_same ) {
+					$html .= "<td>{$thisVal}</td>";
+				} else {
+					$html .= "<td>{$thisVal}</td><td>{$lastVal}</td>";
+				}
+			}
+
+			if ( $is_same ) {
+				$html .= "<td>{$item['total_this']}</td>";
+			} else {
+				$html .= "<td>{$item['total_this']}</td><td>{$item['total_last']}</td>";
+			}
+
+			$html .= '</tr>';
+		}
+
+		$html .= '</table></body></html>';
+
+		/*
+		=========================
+		DOMPDF RENDER
+		========================= */
+
+		$options = new Options();
+		$options->set( 'isRemoteEnabled', true );
+
+		$dompdf = new Dompdf( $options );
+		$dompdf->loadHtml( $html );
+		$dompdf->setPaper( 'A4', 'landscape' );
+		$dompdf->render();
+
+		$dompdf->stream( 'items_interval.pdf', array( 'Attachment' => true ) );
+		exit;
+	}
 
 	/**
 	 * Dashboard.
@@ -483,10 +1316,10 @@ class ReportService {
 
 		foreach ( $all_sites as $s ) {
 			// Filter by entity/site
-			if ( $entity !== 'all' && $s->entity_id != $entity ) {
+			if ( 'all' !== $entity && $entity !== $s->entity_id ) {
 				continue;
 			}
-			if ( $site !== 'all' && $s->site_id != $site ) {
+			if ( 'all' !== $site && $site !== $s->site_id ) {
 				continue;
 			}
 
@@ -760,11 +1593,11 @@ class ReportService {
 
 		foreach ( $all_sites as $s ) {
 
-			if ( $entity !== 'all' && (int) $s->entity_id !== (int) $entity ) {
+			if ( 'all' !== $entity && (int) $s->entity_id !== (int) $entity ) {
 				continue;
 			}
 
-			if ( $site !== 'all' && (int) $s->site_id !== (int) $site ) {
+			if ( 'all' !== $site && (int) $s->site_id !== (int) $site ) {
 				continue;
 			}
 

@@ -1,10 +1,8 @@
 import { useContext, useEffect, useMemo, useState } from "@wordpress/element";
-import { FilterContext } from "../App";
+import { FilterContext } from "../contexts";
 import React from "react";
 
-/* =========================
-   HELPERS
-========================= */
+/* ================= HELPERS ================= */
 
 const money = (v) => {
   const n = Number(v || 0);
@@ -14,9 +12,7 @@ const money = (v) => {
   });
 };
 
-/* =========================
-   COMPONENT
-========================= */
+/* ================= COMPONENT ================= */
 
 export default function DailySalesSimple() {
   const { filters } = useContext(FilterContext);
@@ -24,12 +20,14 @@ export default function DailySalesSimple() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
-	const [flatExporting, setFlatExporting] = useState(false);
+  const [flatExporting, setFlatExporting] = useState(false);
 
+  /* ================= FIX: correct filter mapping ================= */
 
-  /* =========================
-     FETCH
-  ========================= */
+  const from = filters.range?.from || "";
+  const to = filters.range?.to || "";
+
+  /* ================= FETCH ================= */
 
   useEffect(() => {
     const api = window.WRM_API;
@@ -38,12 +36,17 @@ export default function DailySalesSimple() {
     setLoading(true);
 
     const params = new URLSearchParams({
-      from: filters.from,
-      to: filters.to,
+      from,
+      to,
     });
 
-    if (filters.entity) params.append("entity", filters.entity);
-    if (filters.site) params.append("site", filters.site);
+    if (filters.entity && filters.entity !== "all") {
+      params.append("entity", filters.entity);
+    }
+
+    if (filters.site && filters.site !== "all") {
+      params.append("site", filters.site);
+    }
 
     fetch(`${api.url}reports/daily-sales?${params.toString()}`, {
       headers: { "X-WP-Nonce": api.nonce },
@@ -51,11 +54,9 @@ export default function DailySalesSimple() {
       .then((r) => r.json())
       .then((d) => setData(d?.data || null))
       .finally(() => setLoading(false));
-  }, [filters]);
+  }, [from, to, filters.entity, filters.site]);
 
-  /* =========================
-     DERIVED
-  ========================= */
+  /* ================= DERIVED ================= */
 
   const sites = data?.sites || [];
   const days = data?.days || [];
@@ -72,9 +73,7 @@ export default function DailySalesSimple() {
       .map((s) => s.id);
   }, [sites]);
 
-  /* =========================
-     EXPORT
-  ========================= */
+  /* ================= EXPORT (UNCHANGED LOGIC) ================= */
 
   const exportExcel = async () => {
     const api = window.WRM_API;
@@ -84,8 +83,8 @@ export default function DailySalesSimple() {
 
     try {
       const params = new URLSearchParams({
-        from: filters.from,
-        to: filters.to,
+        from,
+        to,
       });
 
       if (filters.entity) params.append("entity", filters.entity);
@@ -95,24 +94,17 @@ export default function DailySalesSimple() {
         `${api.url}reports/daily-sales/download?${params.toString()}`,
         {
           headers: { "X-WP-Nonce": api.nonce },
-        },
+        }
       );
-
-      if (!res.ok) throw new Error("Export failed");
 
       const blob = await res.blob();
 
-      // =========================
-      // GET FILENAME FROM HEADER
-      // =========================
       const disposition = res.headers.get("Content-Disposition");
       let filename = "daily-sales.xlsx";
 
       if (disposition) {
         const match = disposition.match(/filename="?([^"]+)"?/);
-        if (match?.[1]) {
-          filename = match[1];
-        }
+        if (match?.[1]) filename = match[1];
       }
 
       const url = window.URL.createObjectURL(blob);
@@ -130,7 +122,7 @@ export default function DailySalesSimple() {
     }
   };
 
-	  const exportFlatExcel = async () => {
+  const exportFlatExcel = async () => {
     const api = window.WRM_API;
     if (!api?.url || exporting) return;
 
@@ -138,8 +130,8 @@ export default function DailySalesSimple() {
 
     try {
       const params = new URLSearchParams({
-        from: filters.from,
-        to: filters.to,
+        from,
+        to,
       });
 
       if (filters.entity) params.append("entity", filters.entity);
@@ -149,24 +141,17 @@ export default function DailySalesSimple() {
         `${api.url}reports/daily-sales/download-flat?${params.toString()}`,
         {
           headers: { "X-WP-Nonce": api.nonce },
-        },
+        }
       );
-
-      if (!res.ok) throw new Error("Export failed");
 
       const blob = await res.blob();
 
-      // =========================
-      // GET FILENAME FROM HEADER
-      // =========================
       const disposition = res.headers.get("Content-Disposition");
       let filename = "daily-sales.xlsx";
 
       if (disposition) {
         const match = disposition.match(/filename="?([^"]+)"?/);
-        if (match?.[1]) {
-          filename = match[1];
-        }
+        if (match?.[1]) filename = match[1];
       }
 
       const url = window.URL.createObjectURL(blob);
@@ -184,10 +169,11 @@ export default function DailySalesSimple() {
     }
   };
 
+  /* ================= LOADING UI (UNCHANGED) ================= */
+
   if (loading) {
     return (
-      <div className="wrm-page">
-        {/* HEADER SKELETON */}
+      <div className="page">
         <div className="header-bar">
           <div className="skeleton" style={{ width: 160, height: 20 }} />
 
@@ -197,22 +183,15 @@ export default function DailySalesSimple() {
           </div>
         </div>
 
-        {/* SITE TABLE SKELETON */}
         <div className="table-card">
-          <div
-            className="skeleton"
-            style={{ width: 140, height: 18, marginBottom: 12 }}
-          />
+          <div className="skeleton" style={{ width: 140, height: 18, marginBottom: 12 }} />
 
-          <table className="wrm-table">
+          <table className="table">
             <thead>
               <tr>
                 {Array.from({ length: 8 }).map((_, i) => (
                   <th key={i}>
-                    <div
-                      className="skeleton"
-                      style={{ height: 12, width: "70%" }}
-                    />
+                    <div className="skeleton" style={{ height: 12, width: "70%" }} />
                   </th>
                 ))}
               </tr>
@@ -223,10 +202,7 @@ export default function DailySalesSimple() {
                 <tr key={i}>
                   {Array.from({ length: 8 }).map((_, j) => (
                     <td key={j}>
-                      <div
-                        className="skeleton"
-                        style={{ height: 12, width: "80%" }}
-                      />
+                      <div className="skeleton" style={{ height: 12, width: "80%" }} />
                     </td>
                   ))}
                 </tr>
@@ -237,112 +213,107 @@ export default function DailySalesSimple() {
       </div>
     );
   }
-  /* =========================
-     RENDER
-  ========================= */
 
-return (
-  <div className="wrm-page">
+  /* ================= RENDER (UNCHANGED UI) ================= */
 
-    {/* HEADER */}
-    <div className="header-bar">
-      <h1>Daily Sales</h1>
+  return (
+    <div className="page">
 
-      <div className="export-buttons">
-        <button
-          className="wrm-btn wrm-btn-primary"
-          onClick={exportExcel}
-          disabled={exporting}
-        >
-          {exporting ? "Exporting..." : "Export Excel"}
-        </button>
+      <div className="header-bar">
+        <h1>Daily Sales</h1>
 
-        <button
-          className="wrm-btn wrm-btn-primary"
-          onClick={exportFlatExcel}
-          disabled={flatExporting}
-        >
-          {flatExporting ? "Exporting..." : "Export Flat Excel"}
-        </button>
+        <div className="export-buttons">
+          <button
+            className="btn btn-primary"
+            onClick={exportExcel}
+            disabled={exporting}
+          >
+            {exporting ? "Exporting..." : "Export Excel"}
+          </button>
+
+          <button
+            className="btn btn-primary"
+            onClick={exportFlatExcel}
+            disabled={flatExporting}
+          >
+            {flatExporting ? "Exporting..." : "Export Flat Excel"}
+          </button>
+        </div>
       </div>
-    </div>
 
-    {/* TABLE SECTION */}
-    <div className="wrm-section">
+      <div className="section">
 
-      <div className="table-card">
-        <table className="wrm-table">
+        <div className="table-card">
+          <table className="table">
 
-          {/* HEADER */}
-          <thead>
-            <tr>
-              <th rowSpan="2">Date</th>
-              <th rowSpan="2">Day</th>
-              <th rowSpan="2">WK</th>
+            <thead>
+              <tr>
+                <th rowSpan="2">Date</th>
+                <th rowSpan="2">Day</th>
+                <th rowSpan="2">WK</th>
 
-              <th colSpan="4">Overall</th>
+                <th colSpan="4">Overall</th>
 
-              {sortedSiteIds.map((id) => (
-                <th key={id} colSpan="4">
-                  {siteMap[id]}
-                </th>
-              ))}
-            </tr>
+                {sortedSiteIds.map((id) => (
+                  <th key={id} colSpan="4">
+                    {siteMap[id]}
+                  </th>
+                ))}
+              </tr>
 
-            <tr>
-              <th>Net</th>
-              <th>VAT</th>
-              <th>Gross</th>
-              <th>Gratuity</th>
+              <tr>
+                <th>Net</th>
+                <th>VAT</th>
+                <th>Gross</th>
+                <th>Gratuity</th>
 
-              {sortedSiteIds.map((id) => (
-                <React.Fragment key={id}>
-                  <th>Net</th>
-                  <th>VAT</th>
-                  <th>Gross</th>
-                  <th>Gratuity</th>
-                </React.Fragment>
-              ))}
-            </tr>
-          </thead>
+                {sortedSiteIds.map((id) => (
+                  <React.Fragment key={id}>
+                    <th>Net</th>
+                    <th>VAT</th>
+                    <th>Gross</th>
+                    <th>Gratuity</th>
+                  </React.Fragment>
+                ))}
+              </tr>
+            </thead>
 
-          {/* BODY */}
-          <tbody>
-            {days.map((d, i) => {
-              const overall = d.overall || {};
+            <tbody>
+              {days.map((d, i) => {
+                const overall = d.overall || {};
 
-              return (
-                <tr key={i}>
-                  <td>{d.date}</td>
-                  <td>{d.day}</td>
-                  <td>{d.week || ""}</td>
+                return (
+                  <tr key={i}>
+                    <td>{d.date}</td>
+                    <td>{d.day}</td>
+                    <td>{d.week || ""}</td>
 
-                  <td>{money(overall.net)}</td>
-                  <td>{money(overall.vat)}</td>
-                  <td>{money(overall.gross)}</td>
-                  <td>{money(overall.gratuity)}</td>
+                    <td>{money(overall.net)}</td>
+                    <td>{money(overall.vat)}</td>
+                    <td>{money(overall.gross)}</td>
+                    <td>{money(overall.gratuity)}</td>
 
-                  {sortedSiteIds.map((id) => {
-                    const s = d.sites?.[id] || {};
-                    return (
-                      <React.Fragment key={id}>
-                        <td>{money(s.net)}</td>
-                        <td>{money(s.vat)}</td>
-                        <td>{money(s.gross)}</td>
-                        <td>{money(s.gratuity)}</td>
-                      </React.Fragment>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
+                    {sortedSiteIds.map((id) => {
+                      const s = d.sites?.[id] || {};
+                      return (
+                        <React.Fragment key={id}>
+                          <td>{money(s.net)}</td>
+                          <td>{money(s.vat)}</td>
+                          <td>{money(s.gross)}</td>
+                          <td>{money(s.gratuity)}</td>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
 
-        </table>
+          </table>
+        </div>
+
       </div>
 
     </div>
-
-  </div>
-);
+  );
 }

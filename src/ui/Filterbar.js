@@ -1,206 +1,361 @@
-import { useContext, useEffect, useState } from "@wordpress/element";
-import { FilterContext } from "../App";
+import { useContext, useEffect, useRef, useState } from "@wordpress/element";
+import { FilterContext } from "../contexts";
 
 export default function FilterBar() {
-  const { filters, setFilters } = useContext(FilterContext);
+  const { filters, setFilters, weeksData } = useContext(FilterContext);
 
-  const [weeks, setWeeks] = useState([]);
-  const [sites, setSites] = useState([]);
-  const [entities, setEntities] = useState([]);
+  const mode = filters.mode || "range";
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [openRange, setOpenRange] = useState(false);
+  const [openA, setOpenA] = useState(false);
+  const [openB, setOpenB] = useState(false);
+  const [openInterval, setOpenInterval] = useState(false);
 
-  // =========================
-  // LOAD DATA
-  // =========================
-  useEffect(() => {
-    const api = window.WRM_API;
+  const rangeRef = useRef(null);
+  const aRef = useRef(null);
+  const bRef = useRef(null);
+  const intervalRef = useRef(null);
 
-    if (!api || !api.url) {
-      setError("WRM_API not loaded");
-      setLoading(false);
-      return;
-    }
+  const rangePresets = weeksData?.range_presets || [];
+  const weeks = weeksData?.weeks || [];
+  const intervalDatePresets = weeksData?.interval_presets || [];
 
-    // Load localized data
-    setSites(api.sites || []);
-    setEntities(api.entities || []);
+  const allRangePresets = [
+    ...rangePresets,
+    ...weeks.map((w) => ({
+      key: w.key || w.week,
+      label: w.label || w.week,
+      from: w.start,
+      to: w.end,
+    })),
+  ];
 
-    // Fetch weeks from REST API
-    fetch(`${api.url}weeks`, {
-      method: "GET",
-      headers: { "X-WP-Nonce": api.nonce },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load weeks");
-        return res.json();
-      })
-      .then((data) => {
-        const list = data.weeks || [];
-        setWeeks(list);
-
-        // Set default filters based on current week
-        const current = list.find((w) => w.is_current);
-        if (current) {
-          setFilters((prev) => ({
-            ...prev,
-            from: current.start,
-            to: current.end,
-          }));
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        setError(err.message);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  // =========================
-  // FILTER SITES BY ENTITY
-  // =========================
-  const filteredSites =
+  const filteredSites = (window.WRM_API?.sites || []).filter((s) =>
     filters.entity === "all"
-      ? sites
-      : sites.filter((s) => String(s.entity_id) === String(filters.entity));
+      ? true
+      : String(s.entity_id) === String(filters.entity)
+  );
 
-  // =========================
-  // DATE LOGIC
-  // =========================
-  const handleDate = (value) => {
-    const today = new Date();
-    const format = (d) => d.toISOString().split("T")[0];
+  /* ================= RANGE (FIXED) ================= */
 
-    let from = "";
-    let to = "";
-
-    switch (value) {
-      case "today":
-        from = to = format(today);
-        break;
-
-      case "yesterday":
-        const y = new Date(today);
-        y.setDate(today.getDate() - 1);
-        from = to = format(y);
-        break;
-
-      case "this_week":
-        const startWeek = new Date(today);
-        startWeek.setDate(today.getDate() - today.getDay());
-        from = format(startWeek);
-        to = format(today);
-        break;
-
-      case "last_week":
-        const lw = new Date(today);
-        lw.setDate(today.getDate() - today.getDay() - 7);
-
-        const le = new Date(today);
-        le.setDate(today.getDate() - today.getDay() - 1);
-
-        from = format(lw);
-        to = format(le);
-        break;
-
-      case "this_month":
-        from = format(new Date(today.getFullYear(), today.getMonth(), 1));
-        to = format(today);
-        break;
-
-      case "this_year":
-        from = format(new Date(today.getFullYear(), 0, 1));
-        to = format(today);
-        break;
-
-      default:
-        const week = weeks.find((w) => w.week === value);
-        if (week) {
-          from = week.start;
-          to = week.end;
-        }
-    }
-
-    setFilters({ ...filters, from, to });
+  const onFromChange = (value) => {
+    setFilters((p) => ({
+      ...p,
+      range: {
+        ...p.range,
+        from: value,
+        preset: "custom",
+      },
+    }));
   };
 
-  if (loading) return <div>Loading filters...</div>;
-  if (error) return <div style={{ color: "red" }}>{error}</div>;
+  const onToChange = (value) => {
+    setFilters((p) => ({
+      ...p,
+      range: {
+        ...p.range,
+        to: value,
+        preset: "custom",
+      },
+    }));
+  };
+
+  const applyRangePreset = (p) => {
+    setFilters((prev) => ({
+      ...prev,
+      range: {
+        ...prev.range,
+        from: p.from,
+        to: p.to,
+        preset: p.key,
+      },
+    }));
+  };
+
+  /* ================= INTERVAL DATE ================= */
+
+  const applyDatePreset = (side, p) => {
+    setFilters((prev) => ({
+      ...prev,
+      [`interval_${side}`]: p.value,
+      [`interval_${side}_preset`]: p.key,
+    }));
+  };
+
+  const onDateChange = (side, value) => {
+    setFilters((prev) => ({
+      ...prev,
+      [`interval_${side}`]: value,
+      [`interval_${side}_preset`]: "custom",
+    }));
+  };
+
+  /* ================= INTERVAL BUCKET ================= */
+
+  const intervalBuckets = [
+    { key: "5m", label: "5 Minutes", value: 5 },
+    { key: "15m", label: "15 Minutes", value: 15 },
+    { key: "30m", label: "30 Minutes", value: 30 },
+    { key: "60m", label: "Hourly", value: 60 },
+  ];
+
+  /* ================= OUTSIDE CLICK ================= */
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (rangeRef.current && !rangeRef.current.contains(e.target))
+        setOpenRange(false);
+
+      if (aRef.current && !aRef.current.contains(e.target))
+        setOpenA(false);
+
+      if (bRef.current && !bRef.current.contains(e.target))
+        setOpenB(false);
+
+      if (intervalRef.current && !intervalRef.current.contains(e.target))
+        setOpenInterval(false);
+    };
+
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  /* ================= LABEL ================= */
+
+  const getIntervalLabel = () => {
+    if (filters.interval_preset !== "custom") {
+      return (
+        intervalBuckets.find((i) => i.key === filters.interval_preset)
+          ?.label || "Interval"
+      );
+    }
+
+    const total = filters.interval || 5;
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+
+    return h > 0
+      ? `${h}h ${m.toString().padStart(2, "0")}m`
+      : `${m} Min`;
+  };
+
+  /* ================= UI ================= */
 
   return (
-    <div className="filter-bar">
-      {/* DATE RANGE */}
-      <select onChange={(e) => handleDate(e.target.value)}>
-        <option value="">Select Range</option>
+    <div className="filters">
 
-        <optgroup label="Quick Filters">
-          <option value="today">Today</option>
-          <option value="yesterday">Yesterday</option>
-          <option value="this_week">This Week</option>
-          <option value="last_week">Last Week</option>
-          <option value="this_month">This Month</option>
-          <option value="this_year">This Year</option>
-        </optgroup>
+      {/* ================= RANGE ================= */}
+      {mode === "range" && (
+        <div className="filters__group" ref={rangeRef}>
+          <div className="filters__inputs">
+            <input
+              type="date"
+              value={filters.range?.from || ""}
+              onChange={(e) => onFromChange(e.target.value)}
+            />
+            <input
+              type="date"
+              value={filters.range?.to || ""}
+              onChange={(e) => onToChange(e.target.value)}
+            />
+          </div>
 
-        <optgroup label="Weeks">
-          {weeks.map((w, i) => (
-            <option key={`week-${w.week}-${i}`} value={w.week}>
-              {w.week} ({w.start} → {w.end}) {w.is_current ? "🔥" : ""}
-            </option>
-          ))}
-        </optgroup>
-      </select>
+          <button
+            className="filters__toggle"
+            onClick={() => setOpenRange((s) => !s)}
+          >
+            ☰
+          </button>
 
-      {/* DATE PICKERS */}
-      <input
-        type="date"
-        value={filters.from || ""}
-        onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-      />
-      <input
-        type="date"
-        value={filters.to || ""}
-        onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-      />
+          {openRange && (
+            <div className="filters__dropdown">
+              <div className="filters__section">
+                <div className="filters__label">Presets</div>
 
-      {/* ENTITY FILTER */}
+                {allRangePresets.map((p) => (
+                  <div
+                    key={p.key}
+                    className={`filters__option ${
+                      filters.range?.preset === p.key ? "is-active" : ""
+                    }`}
+                    onClick={() => {
+                      applyRangePreset(p);
+                      setOpenRange(false);
+                    }}
+                  >
+                    {p.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================= INTERVAL ================= */}
+      {mode === "interval" && (
+        <div className="filters__group filters__group--multi">
+
+          {/* A */}
+          <div className="filters__group" ref={aRef}>
+            <div className="filters__inputs">
+              <input
+                type="date"
+                value={filters.interval_a || ""}
+                onChange={(e) => onDateChange("a", e.target.value)}
+              />
+            </div>
+
+            <button
+              className="filters__toggle"
+              onClick={() => setOpenA((s) => !s)}
+            >
+              ☰
+            </button>
+
+            {openA && (
+              <div className="filters__dropdown">
+                <div className="filters__section">
+                  <div className="filters__label">Base Date</div>
+                  {intervalDatePresets.map((p) => (
+                    <div
+                      key={p.key}
+                      className={`filters__option ${
+                        filters.interval_a_preset === p.key ? "is-active" : ""
+                      }`}
+                      onClick={() => {
+                        applyDatePreset("a", p);
+                        setOpenA(false);
+                      }}
+                    >
+                      {p.label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* B */}
+          <div className="filters__group" ref={bRef}>
+            <div className="filters__inputs">
+              <input
+                type="date"
+                value={filters.interval_b || ""}
+                onChange={(e) => onDateChange("b", e.target.value)}
+              />
+            </div>
+
+            <button
+              className="filters__toggle"
+              onClick={() => setOpenB((s) => !s)}
+            >
+              ☰
+            </button>
+
+            {openB && (
+              <div className="filters__dropdown">
+                <div className="filters__section">
+                  <div className="filters__label">Compare Date</div>
+                  {intervalDatePresets.map((p) => (
+                    <div
+                      key={p.key}
+                      className={`filters__option ${
+                        filters.interval_b_preset === p.key ? "is-active" : ""
+                      }`}
+                      onClick={() => {
+                        applyDatePreset("b", p);
+                        setOpenB(false);
+                      }}
+                    >
+                      {p.label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* INTERVAL */}
+          <div className="filters__group" ref={intervalRef}>
+            <button
+              className="filters__interval-trigger"
+              onClick={() => setOpenInterval((s) => !s)}
+            >
+              {getIntervalLabel()}
+            </button>
+
+            {openInterval && (
+              <div className="filters__dropdown">
+                <div className="filters__section">
+                  <div className="filters__label">Interval</div>
+
+                  {[
+                    { label: "5 Minutes", value: 5 },
+                    { label: "15 Minutes", value: 15 },
+                    { label: "30 Minutes", value: 30 },
+                    { label: "1 Hour", value: 60 },
+                  ].map((p) => (
+                    <div
+                      key={p.value}
+                      className="filters__option"
+                      onClick={() => {
+                        setFilters((prev) => ({
+                          ...prev,
+                          interval: p.value,
+                          interval_value: p.value,
+                          interval_unit: "minutes",
+                          interval_preset: p.value === 60 ? "60m" : "custom",
+                        }));
+
+                        setOpenInterval(false);
+                      }}
+                    >
+                      {p.label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* ENTITY */}
       <select
         value={filters.entity || "all"}
         onChange={(e) =>
-          setFilters({ ...filters, entity: e.target.value, site: "all" })
+          setFilters((p) => ({
+            ...p,
+            entity: e.target.value,
+            site: "all",
+          }))
         }
       >
         <option value="all">All Entities</option>
-        {entities.map((e) => (
-          <option key={`entity-${e.id}`} value={e.id}>
+        {(window.WRM_API?.entities || []).map((e) => (
+          <option key={e.id} value={e.id}>
             {e.name}
           </option>
         ))}
       </select>
 
-      {/* SITE FILTER */}
+      {/* SITE */}
       <select
         value={filters.site || "all"}
-        onChange={(e) => setFilters({ ...filters, site: e.target.value })}
+        onChange={(e) =>
+          setFilters((p) => ({ ...p, site: e.target.value }))
+        }
       >
         <option value="all">All Sites</option>
-        {filteredSites.map((site) => (
-          <option key={`site-${site.site_id}`} value={site.site_id}>
-            {site.name}
+        {filteredSites.map((s) => (
+          <option key={s.site_id} value={s.site_id}>
+            {s.name}
           </option>
         ))}
       </select>
 
-      {/* PAYMENT FILTER */}
-      <select
-        value={filters.payment}
-        onChange={(e) => setFilters({ ...filters, payment: e.target.value })}
-      >
-        <option value="all">All Payments</option>
-        <option value="card">Card</option>
-        <option value="cash">Cash</option>
-      </select>
     </div>
   );
 }

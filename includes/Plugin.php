@@ -44,26 +44,30 @@ class Plugin {
 		add_filter(
 			'wpac_get_capabilities',
 			function ( $caps ) {
-						$caps['wrm_view_dashboard']   = array(
+						$caps['wrm_view_dashboard']          = array(
 							'label'  => 'View Dashboard',
 							'module' => 'report',
 						);
-						$caps['wrm_view_sales']       = array(
+						$caps['wrm_view_sales']              = array(
 							'label'  => 'View Sales',
 							'module' => 'report',
 						);
-						$caps['wrm_view_items']       = array(
+						$caps['wrm_view_items']              = array(
 							'label'  => 'View Items',
 							'module' => 'report',
 						);
-						$caps['wrm_refresh_data']     = array(
+						$caps['wrm_refresh_data']            = array(
 							'label'  => 'Refresh Data',
 							'module' => 'report',
 						);
-						$caps['wrm_view_daily_sales'] = array(
+						$caps['wrm_view_daily_sales']        = array(
 							'label'  => 'View Daily Sales',
 							'module' => 'report',
 						);
+							$caps['wrm_view_items_interval'] = array(
+								'label'  => 'View Items Interval',
+								'module' => 'report',
+							);
 						return $caps;
 			}
 		);
@@ -169,6 +173,13 @@ class Plugin {
 
 		// Only enqueue for the "report" app.
 		if ( 'report' === $current_app ) {
+			wp_enqueue_style( 'dashicons' );
+			wp_enqueue_style(
+				'react-datepicker',
+				'https://unpkg.com/react-datepicker@4.25.0/dist/react-datepicker.css',
+				array(),
+				null
+			);
 			wp_enqueue_script(
 				'wrm-script',
 				plugin_dir_url( __DIR__ ) . 'build/index.js',
@@ -195,6 +206,7 @@ class Plugin {
 					'sites'    => wpac()->sites()->all_array(),
 				)
 			);
+
 		} elseif ( 'report-manager_page_report-manager-data' === $hook ) {
 			wp_enqueue_script( 'jquery' ); // important.
 			wp_enqueue_script(

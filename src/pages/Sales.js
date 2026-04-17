@@ -1,12 +1,10 @@
 import { useContext, useEffect, useState } from "@wordpress/element";
-import { FilterContext } from "../App";
+import { FilterContext } from "../contexts";
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-/* =========================
-   FORMAT HELPERS (FIXED)
-========================= */
+/* ================= FORMAT HELPERS ================= */
 
 const money = (v) =>
   Number(v || 0).toLocaleString("en-GB", {
@@ -14,19 +12,7 @@ const money = (v) =>
     maximumFractionDigits: 2,
   });
 
-const moneyPDF = (v) =>
-  Number(v || 0).toLocaleString("en-GB", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
 const pct = (v) =>
-  Number(v || 0).toLocaleString("en-GB", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  });
-
-const pctPDF = (v) =>
   Number(v || 0).toLocaleString("en-GB", {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
@@ -40,15 +26,14 @@ const variancePct = (c = 0, p = 0) => {
 };
 
 const varClass = (v) => {
-  if (v < 0) return "var-red";
-  if (v < 1) return "var-yellow";
-  if (v < 5) return "var-light-green";
-  return "var-green";
+  const n = Number(v || 0);
+  if (n <= -10) return "var-worst";
+  if (n <= -3) return "var-bad";
+  if (n < 0) return "var-poor";
+  if (n < 3) return "var-neutral";
+  if (n < 8) return "var-good";
+  return "var-best";
 };
-
-/* =========================
-   GRATUITY SPLIT
-========================= */
 
 const splitGratuity = (g = 0) => {
   const total = Number(g || 0);
@@ -58,18 +43,12 @@ const splitGratuity = (g = 0) => {
   };
 };
 
-/* =========================
-   VAT %
-========================= */
-
 const vatPct = (vat = 0, net = 0) => {
   if (!net) return 0;
   return (Number(vat) / Number(net)) * 100;
 };
 
-/* =========================
-   COMPONENT
-========================= */
+/* ================= COMPONENT ================= */
 
 export default function Sales() {
   const { filters } = useContext(FilterContext);
@@ -79,9 +58,12 @@ export default function Sales() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
-  /* =========================
-     FETCH DATA
-  ========================= */
+  /* ================= FIX: correct filter mapping ================= */
+
+  const from = filters.range?.from || "";
+  const to = filters.range?.to || "";
+
+  /* ================= FETCH ================= */
 
   useEffect(() => {
     const api = window.WRM_API;
@@ -90,12 +72,17 @@ export default function Sales() {
     setLoading(true);
 
     const params = new URLSearchParams({
-      from: filters.from,
-      to: filters.to,
+      from,
+      to,
     });
 
-    if (filters.entity) params.append("entity", filters.entity);
-    if (filters.site) params.append("site", filters.site);
+    if (filters.entity && filters.entity !== "all") {
+      params.append("entity", filters.entity);
+    }
+
+    if (filters.site && filters.site !== "all") {
+      params.append("site", filters.site);
+    }
 
     fetch(`${api.url}reports/sales?${params.toString()}`, {
       headers: { "X-WP-Nonce": api.nonce },
@@ -106,7 +93,9 @@ export default function Sales() {
         setDays(d?.days || []);
       })
       .finally(() => setLoading(false));
-  }, [filters]);
+  }, [from, to, filters.entity, filters.site]);
+
+  /* ================= TOTALS ================= */
 
   const sum = (arr, fn) =>
     arr.reduce((t, x) => t + Number(fn(x) || 0), 0);
@@ -129,9 +118,7 @@ export default function Sales() {
     grossP: sum(days, (x) => x.last?.gross),
   };
 
-  /* =========================
-     EXPORT
-  ========================= */
+  /* ================= EXPORT ================= */
 
   const exportExcel = async () => {
     const api = window.WRM_API;
@@ -140,10 +127,7 @@ export default function Sales() {
     setExporting(true);
 
     try {
-      const params = new URLSearchParams({
-        from: filters.from,
-        to: filters.to,
-      });
+      const params = new URLSearchParams({ from, to });
 
       if (filters.entity) params.append("entity", filters.entity);
       if (filters.site) params.append("site", filters.site);
@@ -161,9 +145,7 @@ export default function Sales() {
       const a = document.createElement("a");
       a.href = url;
       a.download = "sales-report.xlsx";
-      document.body.appendChild(a);
       a.click();
-      a.remove();
 
       window.URL.revokeObjectURL(url);
     } finally {
@@ -174,171 +156,47 @@ export default function Sales() {
   const exportPDF = () => {
     const doc = new jsPDF("l", "mm", "a4");
 
-    doc.text("Sales Report - Site Performance", 14, 10);
+    doc.text("Sales Report", 14, 10);
 
     autoTable(doc, {
       startY: 15,
-      head: [
-        [
-          { content: "Site", rowSpan: 2 },
-          { content: "Net Sales", colSpan: 3 },
-          { content: "Gross Sales", colSpan: 3 },
-          { content: "VAT / GRATUITY", colSpan: 4 },
-        ],
-        [
-          "Current",
-          "Previous",
-          "Variance%",
-          "Current",
-          "Previous",
-          "Variance%",
-          "VAT",
-          "VAT%",
-          "Grat",
-          "Eat",
-        ],
-      ],
-      body: sites.map((s) => {
-        const g = splitGratuity(s.this?.gratuity);
-
-        return [
-          s.site,
-          moneyPDF(s.this?.net),
-          moneyPDF(s.last?.net),
-          pctPDF(variancePct(s.this?.net, s.last?.net)) + "%",
-          moneyPDF(s.this?.gross),
-          moneyPDF(s.last?.gross),
-          pctPDF(variancePct(s.this?.gross, s.last?.gross)) + "%",
-          moneyPDF(s.this?.vat),
-          pctPDF(vatPct(s.this?.vat, s.this?.net)) + "%",
-          moneyPDF(g.gratuity9),
-          moneyPDF(g.eatIn35),
-        ];
-      }),
-      styles: { fontSize: 8 },
-    });
-
-    const dayStartY = doc.lastAutoTable.finalY + 15;
-
-    doc.text("Sales Report - Day Performance", 14, dayStartY);
-
-    autoTable(doc, {
-      startY: dayStartY + 5,
-      head: [
-        [
-          { content: "Day", rowSpan: 2 },
-          { content: "Net Sales", colSpan: 3 },
-          { content: "Gross Sales", colSpan: 3 },
-        ],
-        [
-          "Current",
-          "Previous",
-          "Variance%",
-          "Current",
-          "Previous",
-          "Variance%",
-        ],
-      ],
-      body: days.map((d) => [
-        d.day,
-        moneyPDF(d.this?.net),
-        moneyPDF(d.last?.net),
-        pctPDF(variancePct(d.this?.net, d.last?.net)) + "%",
-        moneyPDF(d.this?.gross),
-        moneyPDF(d.last?.gross),
-        pctPDF(variancePct(d.this?.gross, d.last?.gross)) + "%",
+      head: [["Site", "Net", "Gross"]],
+      body: sites.map((s) => [
+        s.site,
+        money(s.this?.net),
+        money(s.this?.gross),
       ]),
-      styles: { fontSize: 8 },
     });
 
     doc.save("sales-report.pdf");
   };
 
-  /* =========================
-     LOADING
-  ========================= */
+  /* ================= UI ================= */
 
   if (loading) {
     return (
-      <div className="wrm-page">
-        {/* HEADER SKELETON */}
+      <div className="sales">
         <div className="header-bar">
           <div className="skeleton" style={{ width: 160, height: 20 }} />
-
           <div className="export-buttons">
             <div className="skeleton" style={{ width: 110, height: 32 }} />
             <div className="skeleton" style={{ width: 110, height: 32 }} />
           </div>
         </div>
 
-        {/* SITE TABLE SKELETON */}
         <div className="table-card">
           <div
             className="skeleton"
             style={{ width: 140, height: 18, marginBottom: 12 }}
           />
 
-          <table className="wrm-table">
-            <thead>
-              <tr>
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <th key={i}>
-                    <div
-                      className="skeleton"
-                      style={{ height: 12, width: "70%" }}
-                    />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
+          <table className="table">
             <tbody>
               {Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
+                  {Array.from({ length: 6 }).map((_, j) => (
                     <td key={j}>
-                      <div
-                        className="skeleton"
-                        style={{ height: 12, width: "80%" }}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* DAY TABLE SKELETON */}
-        <div className="table-card">
-          <div
-            className="skeleton"
-            style={{ width: 140, height: 18, marginBottom: 12 }}
-          />
-
-          <table className="wrm-table">
-            <thead>
-              <tr>
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <th key={i}>
-                    <div
-                      className="skeleton"
-                      style={{ height: 12, width: "70%" }}
-                    />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
-                    <td key={j}>
-                      <div
-                        className="skeleton"
-                        style={{ height: 12, width: "75%" }}
-                      />
+                      <div className="skeleton" style={{ height: 12 }} />
                     </td>
                   ))}
                 </tr>
@@ -349,13 +207,8 @@ export default function Sales() {
       </div>
     );
   }
-
-  /* =========================
-     UI (UNCHANGED LAYOUT)
-  ========================= */
-
-  return (
-    <div className="wrm-sales">
+   return (
+    <div className="sales">
 
       {/* HEADER */}
       <div className="header-bar">
@@ -363,24 +216,24 @@ export default function Sales() {
 
         <div className="export-buttons">
           <button
-            className="wrm-btn wrm-btn-primary"
+            className="btn btn-primary"
             onClick={exportExcel}
             disabled={exporting}
           >
             {exporting ? "Exporting..." : "Export Excel"}
           </button>
 
-          <button className="wrm-btn wrm-btn-secondary" onClick={exportPDF}>
+          <button className="btn btn-secondary" onClick={exportPDF}>
             Export PDF
           </button>
         </div>
       </div>
 
-      {/* SITE TABLE (HEADERS PRESERVED) */}
+      {/* SITE TABLE */}
       <div className="table-card">
         <h2>Site Performance</h2>
 
-        <table className="wrm-table">
+        <table className="table">
           <thead>
             <tr>
               <th rowSpan="2">Site</th>
@@ -408,24 +261,24 @@ export default function Sales() {
             {sites.map((s, i) => {
               const g = splitGratuity(s.this?.gratuity);
 
+              const netV = variancePct(s.this?.net, s.last?.net);
+              const grossV = variancePct(s.this?.gross, s.last?.gross);
+              const vatV = vatPct(s.this?.vat, s.this?.net);
+
               return (
                 <tr key={i}>
                   <td>{s.site}</td>
 
                   <td>{money(s.this?.net)}</td>
                   <td>{money(s.last?.net)}</td>
-                  <td className={varClass(variancePct(s.this?.net, s.last?.net))}>
-                    {pct(variancePct(s.this?.net, s.last?.net))}%
-                  </td>
+                  <td><span className={varClass(netV)}>{pct(netV)}%</span></td>
 
                   <td>{money(s.this?.gross)}</td>
                   <td>{money(s.last?.gross)}</td>
-                  <td className={varClass(variancePct(s.this?.gross, s.last?.gross))}>
-                    {pct(variancePct(s.this?.gross, s.last?.gross))}%
-                  </td>
+                  <td><span className={varClass(grossV)}>{pct(grossV)}%</span></td>
 
                   <td>{money(s.this?.vat)}</td>
-                  <td>{pct(vatPct(s.this?.vat, s.this?.net))}%</td>
+                  <td><span className={varClass(vatV)}>{pct(vatV)}%</span></td>
 
                   <td>{money(g.gratuity9)}</td>
                   <td>{money(g.eatIn35)}</td>
@@ -433,16 +286,19 @@ export default function Sales() {
               );
             })}
 
-            <tr style={{ fontWeight: "bold", background: "#f3f4f6" }}>
+            <tr className="row-total">
               <td>TOTAL</td>
               <td>{money(siteTotals.netC)}</td>
               <td>{money(siteTotals.netP)}</td>
               <td>{pct(variancePct(siteTotals.netC, siteTotals.netP))}%</td>
+
               <td>{money(siteTotals.grossC)}</td>
               <td>{money(siteTotals.grossP)}</td>
               <td>{pct(variancePct(siteTotals.grossC, siteTotals.grossP))}%</td>
+
               <td>{money(siteTotals.vat)}</td>
               <td>{pct(vatPct(siteTotals.vat, siteTotals.netC))}%</td>
+
               <td>{money(siteGrat.gratuity9)}</td>
               <td>{money(siteGrat.eatIn35)}</td>
             </tr>
@@ -450,11 +306,11 @@ export default function Sales() {
         </table>
       </div>
 
-      {/* DAY TABLE (HEADERS PRESERVED) */}
+      {/* DAY TABLE */}
       <div className="table-card">
         <h2>Day Performance</h2>
 
-        <table className="wrm-table">
+        <table className="table">
           <thead>
             <tr>
               <th rowSpan="2">Day</th>
@@ -473,29 +329,31 @@ export default function Sales() {
           </thead>
 
           <tbody>
-            {days.map((d, i) => (
-              <tr key={i}>
-                <td>{d.day}</td>
+            {days.map((d, i) => {
+              const netV = variancePct(d.this?.net, d.last?.net);
+              const grossV = variancePct(d.this?.gross, d.last?.gross);
 
-                <td>{money(d.this?.net)}</td>
-                <td>{money(d.last?.net)}</td>
-                <td className={varClass(variancePct(d.this?.net, d.last?.net))}>
-                  {pct(variancePct(d.this?.net, d.last?.net))}%
-                </td>
+              return (
+                <tr key={i}>
+                  <td>{d.day}</td>
 
-                <td>{money(d.this?.gross)}</td>
-                <td>{money(d.last?.gross)}</td>
-                <td className={varClass(variancePct(d.this?.gross, d.last?.gross))}>
-                  {pct(variancePct(d.this?.gross, d.last?.gross))}%
-                </td>
-              </tr>
-            ))}
+                  <td>{money(d.this?.net)}</td>
+                  <td>{money(d.last?.net)}</td>
+                  <td><span className={varClass(netV)}>{pct(netV)}%</span></td>
 
-            <tr style={{ fontWeight: "bold", background: "#f3f4f6" }}>
+                  <td>{money(d.this?.gross)}</td>
+                  <td>{money(d.last?.gross)}</td>
+                  <td><span className={varClass(grossV)}>{pct(grossV)}%</span></td>
+                </tr>
+              );
+            })}
+
+            <tr className="row-total">
               <td>TOTAL</td>
               <td>{money(dayTotals.netC)}</td>
               <td>{money(dayTotals.netP)}</td>
               <td>{pct(variancePct(dayTotals.netC, dayTotals.netP))}%</td>
+
               <td>{money(dayTotals.grossC)}</td>
               <td>{money(dayTotals.grossP)}</td>
               <td>{pct(variancePct(dayTotals.grossC, dayTotals.grossP))}%</td>

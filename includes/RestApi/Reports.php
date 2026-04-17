@@ -154,6 +154,42 @@ class Reports {
 			)
 		);
 
+		register_rest_route(
+			$ns,
+			'/reports/items-interval',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( ReportService::class, 'items_interval' ),
+				'permission_callback' => function ( $request ) {
+					return self::permission_check( $request, 'wrm_view_items' );
+				},
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/reports/items-interval/excel-download',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( ReportService::class, 'items_interval_excel' ),
+				'permission_callback' => function ( $request ) {
+					return self::permission_check( $request, 'wrm_view_items' );
+				},
+			)
+		);
+
+				register_rest_route(
+					$ns,
+					'/reports/items-interval/pdf-download',
+					array(
+						'methods'             => 'GET',
+						'callback'            => array( ReportService::class, 'items_interval_pdf' ),
+						'permission_callback' => function ( $request ) {
+							return self::permission_check( $request, 'wrm_view_items' );
+						},
+					)
+				);
+
 		// META REPORT.
 		register_rest_route(
 			$ns,

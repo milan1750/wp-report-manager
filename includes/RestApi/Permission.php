@@ -37,11 +37,12 @@ class Permission {
 					$access = wpac()->permissions();
 
 					return array(
-						'dashboard'   => $access->can( 'wrm_view_dashboard' ),
-						'sales'       => $access->can( 'wrm_view_sales' ),
-						'items'       => $access->can( 'wrm_view_items' ),
-						'data'        => $access->can( 'wrm_refresh_data' ),
-						'daily_sales' => $access->can( 'wrm_view_daily_sales' ),
+						'dashboard'      => $access->can( 'wrm_view_dashboard' ),
+						'sales'          => $access->can( 'wrm_view_sales' ),
+						'items'          => $access->can( 'wrm_view_items' ),
+						'data'           => $access->can( 'wrm_refresh_data' ),
+						'daily_sales'    => $access->can( 'wrm_view_daily_sales' ),
+						'items_interval' => $access->can( 'wrm_view_items_interval' ),
 					);
 				},
 				'permission_callback' => function () {
