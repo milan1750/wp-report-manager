@@ -19,7 +19,7 @@ const money = (v) =>
 ========================= */
 
 export default function Items() {
-  const { filters } = useContext(FilterContext);
+  const { filters, setFilters } = useContext(FilterContext);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +33,28 @@ export default function Items() {
 
   const entity = filters.entity;
   const site = filters.site;
+
+  /* ================= INIT MODE FIX ================= */
+  useEffect(() => {
+    setFilters((prev) => {
+      const today = new Date().toISOString().split("T")[0];
+
+      // if already correct, do nothing
+      if (prev.mode === "range" && prev.range?.from && prev.range?.to) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        mode: "range",
+        range: {
+          from: prev.range?.from || today,
+          to: prev.range?.to || today,
+          preset: prev.range?.preset || "same_day",
+        },
+      };
+    });
+  }, [setFilters]);
 
   /* =========================
      FETCH
@@ -75,22 +97,22 @@ export default function Items() {
 
   const totalGross = useMemo(
     () => sites.reduce((a, b) => a + num(b?.gross), 0),
-    [sites]
+    [sites],
   );
 
   const totalNet = useMemo(
     () => sites.reduce((a, b) => a + num(b?.net), 0),
-    [sites]
+    [sites],
   );
 
   const totalQty = useMemo(
     () => sites.reduce((a, b) => a + num(b?.total_qty), 0),
-    [sites]
+    [sites],
   );
 
   const totalTax = useMemo(
     () => sites.reduce((a, b) => a + num(b?.tax), 0),
-    [sites]
+    [sites],
   );
 
   /* =========================
@@ -139,7 +161,10 @@ export default function Items() {
   if (!sites.length && !items.length) {
     return (
       <div className="sales">
-        <div className="table-card" style={{ textAlign: "center", padding: 30 }}>
+        <div
+          className="table-card"
+          style={{ textAlign: "center", padding: 30 }}
+        >
           <h2>No Items Data</h2>
         </div>
       </div>
@@ -152,7 +177,6 @@ export default function Items() {
 
   return (
     <div className="sales">
-
       {/* HEADER */}
       <div className="header-bar">
         <h1>Items Report</h1>
@@ -235,7 +259,6 @@ export default function Items() {
           </table>
         </div>
       )}
-
     </div>
   );
 }

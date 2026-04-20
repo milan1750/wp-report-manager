@@ -21,7 +21,7 @@ ChartJS.register(
   PointElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
 );
 
 export default function Dashboard() {
@@ -36,7 +36,10 @@ export default function Dashboard() {
     setFilters((prev) => {
       const today = new Date().toISOString().split("T")[0];
 
-      if (prev.range?.from && prev.range?.to) return prev;
+      const alreadyCorrect =
+        prev.mode === "range" && prev.range?.from && prev.range?.to;
+
+      if (alreadyCorrect) return prev;
 
       return {
         ...prev,
@@ -91,12 +94,7 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [
-    filters.range?.from,
-    filters.range?.to,
-    filters.entity,
-    filters.site,
-  ]);
+  }, [filters.range?.from, filters.range?.to, filters.entity, filters.site]);
 
   /* ================= HELPERS ================= */
   const money = (v) => Math.round(Number(v || 0));
@@ -136,7 +134,7 @@ export default function Dashboard() {
         },
       ],
     }),
-    [trend]
+    [trend],
   );
 
   const hourlyChart = useMemo(
@@ -150,16 +148,50 @@ export default function Dashboard() {
         },
       ],
     }),
-    [filteredHourly]
+    [filteredHourly],
   );
 
   /* ================= STATES ================= */
-  if (loading) return <div className="loading">Loading...</div>;
+
+  if (loading) {
+    return (
+      <div className="sales">
+        <div className="header-bar">
+          <div className="skeleton" style={{ width: 160, height: 20 }} />
+          <div className="export-buttons">
+            <div className="skeleton" style={{ width: 110, height: 32 }} />
+            <div className="skeleton" style={{ width: 110, height: 32 }} />
+          </div>
+        </div>
+
+        <div className="table-card">
+          <div
+            className="skeleton"
+            style={{ width: 140, height: 18, marginBottom: 12 }}
+          />
+					<div className="table-card">
+          <table className="table">
+            <tbody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 6 }).map((_, j) => (
+                    <td key={j}>
+                      <div className="skeleton" style={{ height: 12 }} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+					</div>
+        </div>
+      </div>
+    );
+  }
   if (error) return <div className="error">{error}</div>;
 
   return (
     <div className="dashboard">
-
       {/* ================= KPI ================= */}
       <div className="kpi">
         {[
@@ -191,7 +223,6 @@ export default function Dashboard() {
 
       {/* ================= TABLES ================= */}
       <div className="grid grid--tables">
-
         <div className="card">
           <h2>Site Performance</h2>
           <table>
@@ -243,7 +274,6 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
-
       </div>
 
       {/* ================= INSIGHTS ================= */}
@@ -254,7 +284,6 @@ export default function Dashboard() {
           <strong>{insights.highest_gross_day || "N/A"}</strong>
         </p>
       </div>
-
     </div>
   );
 }

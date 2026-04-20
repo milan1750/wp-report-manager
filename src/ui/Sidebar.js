@@ -57,7 +57,7 @@ export default function Sidebar({ page, setPage }) {
             className={`nav__button ${page === "items_interval" ? "is-active" : ""}`}
             onClick={() => setPage("items_interval")}
           >
-            🧾 Items Interval
+            🧾 Items Interval Sales
           </button>
         )}
 

@@ -46,6 +46,7 @@ body {
   font-family: Inter, system-ui, sans-serif;
   background: #f6f7fb;
   color: var(--text);
+  overflow-x: hidden;
 }
 
 /* ================= VARIANCE COLORS (TEXT + BG) ================= */
@@ -88,9 +89,16 @@ body {
 
 /* ================= TABLE ================= */
 
+.main,
+.page,
+.item-interval,
+.table-card {
+  min-width: 0;
+}
+
 .table {
-  width: 100%;
-  min-width: 900px;
+  min-width: 100%;
+  width: max-content;
   border-collapse: collapse;
 
   font-size: 12px;
@@ -99,7 +107,6 @@ body {
   /* outer border slightly stronger */
   border: 1px solid #b6c2d1;
   background: #fff;
-
   th,
   td {
     padding: 8px 10px;
@@ -160,13 +167,11 @@ body {
   position: relative;
 
   .sidebar {
-    width: 220px;
+    position: relative; /* instead of fixed */
     flex-shrink: 0;
     background: #fff;
     border-right: 1px solid var(--border);
     padding: var(--space-3);
-    z-index: 10;
-    position: relative;
 
     &__brand {
       margin-bottom: var(--space-3);
@@ -210,14 +215,9 @@ body {
   }
 
   .main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    overflow: visible;
     position: relative;
     z-index: 1;
-
+    width: 100%;
     .filters {
       display: flex;
       align-items: center;
@@ -231,8 +231,8 @@ body {
       box-shadow: var(--shadow-sm);
 
       position: relative;
-      z-index: 50;
-
+      z-index: 1000;
+      overflow: visible !important;
       /* ================= GROUP ================= */
       &__group {
         display: flex;
@@ -345,6 +345,7 @@ body {
             text-transform: uppercase;
             letter-spacing: 0.05em;
             margin-bottom: 4px;
+            width: 100%;
           }
 
           /* OPTION */
@@ -368,9 +369,11 @@ body {
           /* CUSTOM INPUT */
           .filters__custom {
             display: flex;
+            align-items: center;
             gap: 6px;
             margin-top: 6px;
             padding-top: 6px;
+            flex-direction: column;
             border-top: 1px solid var(--border);
 
             input,
@@ -405,6 +408,90 @@ body {
       }
     }
 
+    /* Sections */
+    .filters__section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* Divider */
+    .filters__divider {
+      height: 1px;
+      background: #eee;
+      margin: 8px 0;
+    }
+
+    /* ================= CHIPS ================= */
+    .filters__chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .filters__chip {
+      padding: 4px 10px;
+      font-size: 12px;
+      border-radius: 999px;
+      border: 1px solid #ddd;
+      background: #fff;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .filters__chip:hover {
+      border-color: #999;
+      transform: translateY(-1px);
+    }
+
+    .filters__chip.is-active {
+      background: #111;
+      color: #fff;
+      border-color: #111;
+    }
+
+    /* ================= CUSTOM ================= */
+    .filters__custom {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .filters__custom > div:last-child {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    /* Input */
+    .filters__custom input[type="number"] {
+      width: 70px;
+      padding: 6px 8px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      outline: none;
+    }
+
+    .filters__custom input[type="number"]:focus {
+      border-color: #111;
+    }
+
+    /* Select */
+    .filters__custom select {
+      padding: 6px 8px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .filters__custom select:focus {
+      border-color: #111;
+    }
+
+    .filters__interval-trigger:hover {
+      border-color: #999;
+    }
     /* ================= PAGE ================= */
     .page {
       flex: 1;
@@ -412,8 +499,7 @@ body {
       display: flex;
       flex-direction: column;
       gap: 12px;
-      overflow: auto;
-
+      overflow: visible;
       /* ================= HEADER ================= */
       .header-bar {
         display: flex;
@@ -478,20 +564,22 @@ body {
       }
 
       .table-card {
+        overflow: hidden;
+        width: 100%;
         background: #fff;
         border: 1px solid #e5e7eb;
-
         padding: 12px;
-
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
-
-        overflow-x: auto;
-
         h2 {
           font-size: 14px;
           font-weight: 600;
           margin: 0 0 10px;
           color: #111827;
+        }
+
+        .table-scroll {
+          height: 50vh;
+          overflow: auto;
         }
       }
 
@@ -517,17 +605,9 @@ body {
 
         /* ensures tables never break layout */
         min-width: 0;
+        overflow: visible;
 
         /* ================= TABLE CARD ================= */
-      }
-
-      .item-interval {
-        .table {
-          display: block;
-          width: 100%;
-          max-height: 60vh; /* adjust if needed */
-          overflow: auto; /* BOTH vertical + horizontal scroll */
-        }
       }
 
       /* ================================
@@ -681,9 +761,12 @@ body {
     flex-direction: column;
 
     .sidebar {
-      width: 100%;
-      display: flex;
-      overflow-x: auto;
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 100vh;
+      width: 220px;
+      z-index: 1;
     }
 
     .main {

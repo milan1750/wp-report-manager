@@ -215,6 +215,7 @@ class WeekService {
 		$today     = new \DateTime( 'today' );
 		$yesterday = new \DateTime( 'yesterday' );
 
+		$same_last_week  = ( clone $today )->modify( '-7 days' );
 		$same_last_month = ( clone $today )->modify( '-1 month' );
 		$same_last_year  = ( clone $today )->modify( '-1 year' );
 
@@ -228,6 +229,11 @@ class WeekService {
 				'key'   => 'yesterday',
 				'label' => 'Yesterday',
 				'value' => $yesterday->format( 'Y-m-d' ),
+			),
+			array(
+				'key'   => 'same_last_week',
+				'label' => 'Same Day Last Week',
+				'value' => $same_last_week->format( 'Y-m-d' ),
 			),
 			array(
 				'key'   => 'same_last_month',

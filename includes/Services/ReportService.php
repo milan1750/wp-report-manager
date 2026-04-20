@@ -478,6 +478,7 @@ class ReportService {
 		$entity = $request['entity'] ?? 'all';
 		$site   = $request['site'] ?? 'all';
 
+		// ✅ FIX: use local time, not UTC
 		$a = $request['interval_a'] ?? gmdate( 'Y-m-d' );
 		$b = $request['interval_b'] ?? gmdate( 'Y-m-d' );
 
@@ -493,8 +494,9 @@ class ReportService {
 
 		/*
 		=========================
-			SITES + PERMISSION FIX
-		========================= */
+		SITES + PERMISSION
+		=========================
+		*/
 
 		$permissions = wpac()->permissions();
 		$all_sites   = wpac()->sites()->all();
@@ -503,11 +505,11 @@ class ReportService {
 
 		foreach ( $all_sites as $s ) {
 
-			if ( $entity !== 'all' && (int) $entity !== (int) $s->entity_id ) {
+			if ( 'all' !== $entity && (int) $entity !== (int) $s->entity_id ) {
 				continue;
 			}
 
-			if ( $site !== 'all' && (int) $site !== (int) $s->site_id ) {
+			if ( 'all' !== $site && (int) $site !== (int) $s->site_id ) {
 				continue;
 			}
 
@@ -522,6 +524,7 @@ class ReportService {
 
 			$allowed_sites[] = (int) $s->site_id;
 		}
+		error_log(print_r(	$allowed_sites, true  ));
 
 		if ( empty( $allowed_sites ) ) {
 			return array(
@@ -536,24 +539,26 @@ class ReportService {
 
 		/*
 		=========================
-			SQL
-		========================= */
+		SQL (single source of truth)
+		=========================
+		*/
 
 		$sql = "
-			SELECT
-				item_title,
-				FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(added_datetime)/%d)*%d) AS bucket,
-				SUM(quantity) AS qty
-			FROM $t
-			WHERE added_datetime BETWEEN %s AND %s
-			$where_sites
-			GROUP BY item_title, bucket
-		";
+		SELECT
+			item_title,
+			FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(added_datetime)/%d)*%d) AS bucket,
+			SUM(quantity) AS qty
+		FROM $t
+		WHERE added_datetime BETWEEN %s AND %s
+		$where_sites
+		GROUP BY item_title, bucket
+	";
 
 		$this_rows = $wpdb->get_results(
 			$wpdb->prepare( $sql, $seconds, $seconds, $from, $to ),
 			ARRAY_A
 		);
+		error_log(print_r(	$this_rows, true  ));
 
 		$last_rows = array();
 
@@ -566,24 +571,17 @@ class ReportService {
 
 		/*
 		=========================
-			BUILD DATA
-		========================= */
+		BUILD DATA
+		=========================
+		*/
 
 		$items    = array();
 		$slot_set = array();
 
-		// 🔥 FIXED NORMALIZER (REAL 30/60 MIN SUPPORT)
-		$normalize = function ( $bucket ) use ( $interval ) {
-
+		// ✅ FIX: no double bucketing
+		$normalize = function ( $bucket ) {
 			$ts = strtotime( $bucket );
-			if ( ! $ts ) {
-				return '00:00';
-			}
-
-			$minutes = (int) date( 'i', $ts );
-			$rounded = floor( $minutes / $interval ) * $interval;
-
-			return date( 'H', $ts ) . ':' . str_pad( $rounded, 2, '0', STR_PAD_LEFT );
+			return $ts ? date( 'H:i', $ts ) : '00:00';
 		};
 
 		$process = function ( $rows, $key ) use ( &$items, &$slot_set, $normalize ) {
@@ -626,7 +624,8 @@ class ReportService {
 		/*
 		=========================
 		NORMALIZE EMPTY + TOTALS
-		========================= */
+		=========================
+		*/
 
 		$column_totals = array();
 
@@ -656,18 +655,20 @@ class ReportService {
 		/*
 		=========================
 		SORT
-		========================= */
+		=========================
+		*/
 
 		usort(
 			$items,
 			fn( $a, $b ) =>
-			$b['row_total']['this'] <=> $a['row_total']['this']
+				$b['row_total']['this'] <=> $a['row_total']['this']
 		);
 
 		/*
 		=========================
-			RETURN
-		========================= */
+		RETURN
+		=========================
+		*/
 
 		return array(
 			'interval'      => $interval,

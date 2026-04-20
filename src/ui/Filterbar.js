@@ -20,6 +20,25 @@ export default function FilterBar() {
   const weeks = weeksData?.weeks || [];
   const intervalDatePresets = weeksData?.interval_presets || [];
 
+  useEffect(() => {
+    const value = Number(filters.interval_value || 1);
+    const unit = filters.interval_unit || "minutes";
+
+    const total = unit === "hours" ? value * 60 : value;
+
+    setFilters((prev) => ({
+      ...prev,
+      interval: total,
+    }));
+  }, [filters.interval_value, filters.interval_unit]);
+
+  const isQuickActive = (c) => {
+    const value = Number(filters.interval_value);
+    const unit = filters.interval_unit;
+
+    return value === c.value && unit === c.unit;
+  };
+
   const allRangePresets = [
     ...rangePresets,
     ...weeks.map((w) => ({
@@ -33,10 +52,29 @@ export default function FilterBar() {
   const filteredSites = (window.WRM_API?.sites || []).filter((s) =>
     filters.entity === "all"
       ? true
-      : String(s.entity_id) === String(filters.entity)
+      : String(s.entity_id) === String(filters.entity),
   );
 
-  /* ================= RANGE (FIXED) ================= */
+  /* ================= OUTSIDE CLICK ================= */
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (rangeRef.current && !rangeRef.current.contains(e.target))
+        setOpenRange(false);
+
+      if (aRef.current && !aRef.current.contains(e.target)) setOpenA(false);
+
+      if (bRef.current && !bRef.current.contains(e.target)) setOpenB(false);
+
+      if (intervalRef.current && !intervalRef.current.contains(e.target))
+        setOpenInterval(false);
+    };
+
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  /* ================= RANGE ================= */
 
   const onFromChange = (value) => {
     setFilters((p) => ({
@@ -72,7 +110,7 @@ export default function FilterBar() {
     }));
   };
 
-  /* ================= INTERVAL DATE ================= */
+  /* ================= DATE ================= */
 
   const applyDatePreset = (side, p) => {
     setFilters((prev) => ({
@@ -90,60 +128,23 @@ export default function FilterBar() {
     }));
   };
 
-  /* ================= INTERVAL BUCKET ================= */
-
-  const intervalBuckets = [
-    { key: "5m", label: "5 Minutes", value: 5 },
-    { key: "15m", label: "15 Minutes", value: 15 },
-    { key: "30m", label: "30 Minutes", value: 30 },
-    { key: "60m", label: "Hourly", value: 60 },
-  ];
-
-  /* ================= OUTSIDE CLICK ================= */
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (rangeRef.current && !rangeRef.current.contains(e.target))
-        setOpenRange(false);
-
-      if (aRef.current && !aRef.current.contains(e.target))
-        setOpenA(false);
-
-      if (bRef.current && !bRef.current.contains(e.target))
-        setOpenB(false);
-
-      if (intervalRef.current && !intervalRef.current.contains(e.target))
-        setOpenInterval(false);
-    };
-
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  /* ================= LABEL ================= */
+  /* ================= LABEL (FIXED) ================= */
 
   const getIntervalLabel = () => {
-    if (filters.interval_preset !== "custom") {
-      return (
-        intervalBuckets.find((i) => i.key === filters.interval_preset)
-          ?.label || "Interval"
-      );
-    }
+    const v = filters.interval_value;
+    const u = filters.interval_unit;
 
-    const total = filters.interval || 5;
-    const h = Math.floor(total / 60);
-    const m = total % 60;
+    if (!v) return "Interval";
 
-    return h > 0
-      ? `${h}h ${m.toString().padStart(2, "0")}m`
-      : `${m} Min`;
+    // IMPORTANT FIX: correct display rules
+    if (u === "hours") return `${v}H`;
+    return `${v}M`;
   };
 
   /* ================= UI ================= */
 
   return (
     <div className="filters">
-
       {/* ================= RANGE ================= */}
       {mode === "range" && (
         <div className="filters__group" ref={rangeRef}>
@@ -195,7 +196,6 @@ export default function FilterBar() {
       {/* ================= INTERVAL ================= */}
       {mode === "interval" && (
         <div className="filters__group filters__group--multi">
-
           {/* A */}
           <div className="filters__group" ref={aRef}>
             <div className="filters__inputs">
@@ -287,38 +287,73 @@ export default function FilterBar() {
 
             {openInterval && (
               <div className="filters__dropdown">
+                {/* QUICK CHIPS */}
                 <div className="filters__section">
-                  <div className="filters__label">Interval</div>
+                  <div className="filters__label">Quick</div>
+                  <div className="filters__chips">
+                    {[
+                      { label: "5m", value: 5, unit: "minutes" },
+                      { label: "15m", value: 15, unit: "minutes" },
+                      { label: "30m", value: 30, unit: "minutes" },
+                      { label: "1h", value: 1, unit: "hours" },
+                      { label: "2h", value: 2, unit: "hours" },
+                    ].map((c) => (
+                      <button
+                        className={`filters__chip ${
+                          isQuickActive(c) ? "is-active" : ""
+                        }`}
+                        key={c.label}
+                        onClick={() =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            interval_value: c.value,
+                            interval_unit: c.unit,
+                            interval_preset: "custom",
+                          }))
+                        }
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                  {[
-                    { label: "5 Minutes", value: 5 },
-                    { label: "15 Minutes", value: 15 },
-                    { label: "30 Minutes", value: 30 },
-                    { label: "1 Hour", value: 60 },
-                  ].map((p) => (
-                    <div
-                      key={p.value}
-                      className="filters__option"
-                      onClick={() => {
+                <div className="filters__divider" />
+
+                {/* CUSTOM */}
+                <div className="filters__custom">
+                  <div className="filters__label">Custom</div>
+                  <div>
+                    <input
+                      type="number"
+                      min="1"
+                      value={filters.interval_value || ""}
+                      onChange={(e) =>
                         setFilters((prev) => ({
                           ...prev,
-                          interval: p.value,
-                          interval_value: p.value,
-                          interval_unit: "minutes",
-                          interval_preset: p.value === 60 ? "60m" : "custom",
-                        }));
-
-                        setOpenInterval(false);
-                      }}
+                          interval_value: Number(e.target.value),
+                          interval_preset: "custom",
+                        }))
+                      }
+                      style={{ width: "70px" }}
+                    />
+                    <select
+                      onChange={(e) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          interval_unit: e.target.value,
+                          interval_preset: "custom",
+                        }))
+                      }
                     >
-                      {p.label}
-                    </div>
-                  ))}
+                      <option value="minutes">Minutes</option>
+                      <option value="hours">Hours</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             )}
           </div>
-
         </div>
       )}
 
@@ -344,9 +379,7 @@ export default function FilterBar() {
       {/* SITE */}
       <select
         value={filters.site || "all"}
-        onChange={(e) =>
-          setFilters((p) => ({ ...p, site: e.target.value }))
-        }
+        onChange={(e) => setFilters((p) => ({ ...p, site: e.target.value }))}
       >
         <option value="all">All Sites</option>
         {filteredSites.map((s) => (
@@ -355,7 +388,6 @@ export default function FilterBar() {
           </option>
         ))}
       </select>
-
     </div>
   );
 }

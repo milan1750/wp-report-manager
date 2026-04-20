@@ -51,18 +51,40 @@ const vatPct = (vat = 0, net = 0) => {
 /* ================= COMPONENT ================= */
 
 export default function Sales() {
-  const { filters } = useContext(FilterContext);
-
+  const { filters, setFilters } = useContext(FilterContext);
   const [sites, setSites] = useState([]);
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
-  /* ================= FIX: correct filter mapping ================= */
+  /* ================= FIX: SAFE MODE + FILTER SYNC ================= */
 
-  const from = filters.range?.from || "";
-  const to = filters.range?.to || "";
+  const isRangeMode = filters.mode === "range";
 
+  const from = isRangeMode ? filters.range?.from || "" : "";
+  const to = isRangeMode ? filters.range?.to || "" : "";
+
+  /* ================= INIT MODE FIX ================= */
+  useEffect(() => {
+    setFilters((prev) => {
+      const today = new Date().toISOString().split("T")[0];
+
+      // if already correct, do nothing
+      if (prev.mode === "range" && prev.range?.from && prev.range?.to) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        mode: "range",
+        range: {
+          from: prev.range?.from || today,
+          to: prev.range?.to || today,
+          preset: prev.range?.preset || "same_day",
+        },
+      };
+    });
+  }, [setFilters]);
   /* ================= FETCH ================= */
 
   useEffect(() => {
@@ -93,12 +115,17 @@ export default function Sales() {
         setDays(d?.days || []);
       })
       .finally(() => setLoading(false));
-  }, [from, to, filters.entity, filters.site]);
+  }, [
+    filters.range?.from,
+    filters.range?.to,
+    filters.entity,
+    filters.site,
+    filters.mode,
+  ]);
 
   /* ================= TOTALS ================= */
 
-  const sum = (arr, fn) =>
-    arr.reduce((t, x) => t + Number(fn(x) || 0), 0);
+  const sum = (arr, fn) => arr.reduce((t, x) => t + Number(fn(x) || 0), 0);
 
   const siteTotals = {
     netC: sum(sites, (x) => x.this?.net),
@@ -136,7 +163,7 @@ export default function Sales() {
         `${api.url}reports/sales/download?${params.toString()}`,
         {
           headers: { "X-WP-Nonce": api.nonce },
-        }
+        },
       );
 
       const blob = await res.blob();
@@ -207,9 +234,9 @@ export default function Sales() {
       </div>
     );
   }
-   return (
-    <div className="sales">
 
+  return (
+    <div className="sales">
       {/* HEADER */}
       <div className="header-bar">
         <h1>Sales Report</h1>
@@ -232,7 +259,7 @@ export default function Sales() {
       {/* SITE TABLE */}
       <div className="table-card">
         <h2>Site Performance</h2>
-
+				<div className=" table-scroll">
         <table className="table">
           <thead>
             <tr>
@@ -271,14 +298,20 @@ export default function Sales() {
 
                   <td>{money(s.this?.net)}</td>
                   <td>{money(s.last?.net)}</td>
-                  <td><span className={varClass(netV)}>{pct(netV)}%</span></td>
+                  <td>
+                    <span className={varClass(netV)}>{pct(netV)}%</span>
+                  </td>
 
                   <td>{money(s.this?.gross)}</td>
                   <td>{money(s.last?.gross)}</td>
-                  <td><span className={varClass(grossV)}>{pct(grossV)}%</span></td>
+                  <td>
+                    <span className={varClass(grossV)}>{pct(grossV)}%</span>
+                  </td>
 
                   <td>{money(s.this?.vat)}</td>
-                  <td><span className={varClass(vatV)}>{pct(vatV)}%</span></td>
+                  <td>
+                    <span className={varClass(vatV)}>{pct(vatV)}%</span>
+                  </td>
 
                   <td>{money(g.gratuity9)}</td>
                   <td>{money(g.eatIn35)}</td>
@@ -304,13 +337,14 @@ export default function Sales() {
             </tr>
           </tbody>
         </table>
+				</div>
       </div>
 
       {/* DAY TABLE */}
       <div className="table-card">
         <h2>Day Performance</h2>
-
-        <table className="table">
+					<div className=" table-scroll">
+        <table className="table table-scroll">
           <thead>
             <tr>
               <th rowSpan="2">Day</th>
@@ -339,11 +373,15 @@ export default function Sales() {
 
                   <td>{money(d.this?.net)}</td>
                   <td>{money(d.last?.net)}</td>
-                  <td><span className={varClass(netV)}>{pct(netV)}%</span></td>
+                  <td>
+                    <span className={varClass(netV)}>{pct(netV)}%</span>
+                  </td>
 
                   <td>{money(d.this?.gross)}</td>
                   <td>{money(d.last?.gross)}</td>
-                  <td><span className={varClass(grossV)}>{pct(grossV)}%</span></td>
+                  <td>
+                    <span className={varClass(grossV)}>{pct(grossV)}%</span>
+                  </td>
                 </tr>
               );
             })}
@@ -360,8 +398,9 @@ export default function Sales() {
             </tr>
           </tbody>
         </table>
-      </div>
 
+					</div>
+      </div>
     </div>
   );
 }

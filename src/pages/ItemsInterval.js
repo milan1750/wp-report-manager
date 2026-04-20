@@ -16,13 +16,15 @@ export default function ItemsInterval() {
   /* INIT */
   useEffect(() => {
     setFilters((prev) => {
-      if (prev.__init_interval_items) return prev;
-
       const today = new Date().toISOString().split("T")[0];
+
+      const alreadyCorrect =
+        prev.mode === "interval" && prev.interval_a && prev.interval_b;
+
+      if (alreadyCorrect) return prev;
 
       return {
         ...prev,
-        __init_interval_items: true,
         mode: "interval",
         interval_a: today,
         interval_b: today,
@@ -31,7 +33,7 @@ export default function ItemsInterval() {
         interval: 60,
       };
     });
-  }, []);
+  }, [setFilters]);
 
   /* PARAMS */
   const params = useMemo(() => {
@@ -74,8 +76,8 @@ export default function ItemsInterval() {
       slots.forEach((slot) => {
         const s = item.slots?.[slot] || { this: 0, last: 0 };
 
-        thisTotal += num(s.this);
-        lastTotal += num(s.last);
+        thisTotal = Math.round((thisTotal + num(s.this)) * 1000) / 1000;
+        lastTotal = Math.round((lastTotal + num(s.last)) * 1000) / 1000;
       });
 
       return { ...item, thisTotal, lastTotal };
@@ -96,16 +98,26 @@ export default function ItemsInterval() {
       itemsWithTotals.forEach((item) => {
         const s = item.slots?.[slot] || { this: 0, last: 0 };
 
-        totals[slot].this += num(s.this);
-        totals[slot].last += num(s.last);
+        totals[slot].this =
+          Math.round((totals[slot].this + num(s.this)) * 100) / 100;
+
+        totals[slot].last =
+          Math.round((totals[slot].last + num(s.last)) * 100) / 100;
       });
     });
 
     return totals;
   }, [itemsWithTotals, slots]);
 
-  const grandThis = itemsWithTotals.reduce((a, i) => a + i.thisTotal, 0);
-  const grandLast = itemsWithTotals.reduce((a, i) => a + i.lastTotal, 0);
+  const round2 = (v) => Math.round((v || 0) * 100) / 100;
+
+  const grandThis = round2(
+    itemsWithTotals.reduce((a, i) => a + i.thisTotal, 0),
+  );
+
+  const grandLast = round2(
+    itemsWithTotals.reduce((a, i) => a + i.lastTotal, 0),
+  );
 
   const isSameDay =
     filters.interval_a &&
@@ -234,6 +246,7 @@ export default function ItemsInterval() {
       <div className="sales">
         <div className="table-card empty">
           <h2>No Interval Data</h2>
+          <p>Please select the correct date.</p>
         </div>
       </div>
     );
@@ -265,76 +278,78 @@ export default function ItemsInterval() {
       </div>
 
       <div className="table-card">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Item</th>
+        <div className="table-scroll">
+          <table className="table ">
+            <thead>
+              <tr>
+                <th>Item</th>
 
-              {slots.map((slot) => (
-                <th key={slot}>
-                  {slot}
-                  <div className="muted">{isSameDay ? "Total" : "T / L"}</div>
-                </th>
-              ))}
+                {slots.map((slot) => (
+                  <th key={slot}>
+                    {slot}
+                    <div className="muted">{isSameDay ? "Total" : "T / L"}</div>
+                  </th>
+                ))}
 
-              <th>Total</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {sortedItems.map((item, i) => (
-              <tr key={i}>
-                <td>{item.item_title}</td>
-
-                {slots.map((slot) => {
-                  const s = item.slots?.[slot] || { this: 0, last: 0 };
-
-                  return (
-                    <td key={slot}>
-                      {isSameDay ? (
-                        <b>{num(s.this)}</b>
-                      ) : (
-                        <>
-                          <b>{num(s.this)}</b>
-                          <span className="muted"> / {num(s.last)}</span>
-                        </>
-                      )}
-                    </td>
-                  );
-                })}
-
-                <td>
-                  {isSameDay ? (
-                    <b>{item.thisTotal}</b>
-                  ) : (
-                    <>
-                      <b>{item.thisTotal}</b>
-                      <span className="muted"> / {item.lastTotal}</span>
-                    </>
-                  )}
-                </td>
+                <th>Total</th>
               </tr>
-            ))}
-          </tbody>
+            </thead>
 
-          <tfoot>
-            <tr>
-              <th>Total</th>
+            <tbody>
+              {sortedItems.map((item, i) => (
+                <tr key={i}>
+                  <td>{item.item_title}</td>
 
-              {slots.map((slot) => (
-                <th key={slot}>
-                  {isSameDay
-                    ? columnTotals[slot]?.this || 0
-                    : `${columnTotals[slot]?.this || 0} / ${
-                        columnTotals[slot]?.last || 0
-                      }`}
-                </th>
+                  {slots.map((slot) => {
+                    const s = item.slots?.[slot] || { this: 0, last: 0 };
+
+                    return (
+                      <td key={slot}>
+                        {isSameDay ? (
+                          <b>{num(s.this)}</b>
+                        ) : (
+                          <>
+                            <b>{num(s.this)}</b>
+                            <span className="muted"> / {num(s.last)}</span>
+                          </>
+                        )}
+                      </td>
+                    );
+                  })}
+
+                  <td>
+                    {isSameDay ? (
+                      <b>{item.thisTotal}</b>
+                    ) : (
+                      <>
+                        <b>{item.thisTotal}</b>
+                        <span className="muted"> / {item.lastTotal}</span>
+                      </>
+                    )}
+                  </td>
+                </tr>
               ))}
+            </tbody>
 
-              <th>{isSameDay ? grandThis : `${grandThis} / ${grandLast}`}</th>
-            </tr>
-          </tfoot>
-        </table>
+            <tfoot>
+              <tr>
+                <th>Total</th>
+
+                {slots.map((slot) => (
+                  <th key={slot}>
+                    {isSameDay
+                      ? columnTotals[slot]?.this || 0
+                      : `${columnTotals[slot]?.this || 0} / ${
+                          columnTotals[slot]?.last || 0
+                        }`}
+                  </th>
+                ))}
+
+                <th>{isSameDay ? grandThis : `${grandThis} / ${grandLast}`}</th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
     </div>
   );

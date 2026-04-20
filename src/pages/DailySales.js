@@ -94,7 +94,7 @@ export default function DailySalesSimple() {
         `${api.url}reports/daily-sales/download?${params.toString()}`,
         {
           headers: { "X-WP-Nonce": api.nonce },
-        }
+        },
       );
 
       const blob = await res.blob();
@@ -141,7 +141,7 @@ export default function DailySalesSimple() {
         `${api.url}reports/daily-sales/download-flat?${params.toString()}`,
         {
           headers: { "X-WP-Nonce": api.nonce },
-        }
+        },
       );
 
       const blob = await res.blob();
@@ -184,14 +184,20 @@ export default function DailySalesSimple() {
         </div>
 
         <div className="table-card">
-          <div className="skeleton" style={{ width: 140, height: 18, marginBottom: 12 }} />
+          <div
+            className="skeleton"
+            style={{ width: 140, height: 18, marginBottom: 12 }}
+          />
 
           <table className="table">
             <thead>
               <tr>
                 {Array.from({ length: 8 }).map((_, i) => (
                   <th key={i}>
-                    <div className="skeleton" style={{ height: 12, width: "70%" }} />
+                    <div
+                      className="skeleton"
+                      style={{ height: 12, width: "70%" }}
+                    />
                   </th>
                 ))}
               </tr>
@@ -202,7 +208,10 @@ export default function DailySalesSimple() {
                 <tr key={i}>
                   {Array.from({ length: 8 }).map((_, j) => (
                     <td key={j}>
-                      <div className="skeleton" style={{ height: 12, width: "80%" }} />
+                      <div
+                        className="skeleton"
+                        style={{ height: 12, width: "80%" }}
+                      />
                     </td>
                   ))}
                 </tr>
@@ -218,7 +227,6 @@ export default function DailySalesSimple() {
 
   return (
     <div className="page">
-
       <div className="header-bar">
         <h1>Daily Sales</h1>
 
@@ -242,78 +250,75 @@ export default function DailySalesSimple() {
       </div>
 
       <div className="section">
-
         <div className="table-card">
-          <table className="table">
+					<div className="table-scroll">
+						<table className="table">
+							<thead>
+								<tr>
+									<th rowSpan="2">Date</th>
+									<th rowSpan="2">Day</th>
+									<th rowSpan="2">WK</th>
 
-            <thead>
-              <tr>
-                <th rowSpan="2">Date</th>
-                <th rowSpan="2">Day</th>
-                <th rowSpan="2">WK</th>
+									<th colSpan="4">Overall</th>
 
-                <th colSpan="4">Overall</th>
+									{sortedSiteIds.map((id) => (
+										<th key={id} colSpan="4">
+											{siteMap[id]}
+										</th>
+									))}
+								</tr>
 
-                {sortedSiteIds.map((id) => (
-                  <th key={id} colSpan="4">
-                    {siteMap[id]}
-                  </th>
-                ))}
-              </tr>
+								<tr>
+									<th>Net</th>
+									<th>VAT</th>
+									<th>Gross</th>
+									<th>Gratuity</th>
 
-              <tr>
-                <th>Net</th>
-                <th>VAT</th>
-                <th>Gross</th>
-                <th>Gratuity</th>
+									{sortedSiteIds.map((id) => (
+										<React.Fragment key={id}>
+											<th>Net</th>
+											<th>VAT</th>
+											<th>Gross</th>
+											<th>Gratuity</th>
+										</React.Fragment>
+									))}
+								</tr>
+							</thead>
 
-                {sortedSiteIds.map((id) => (
-                  <React.Fragment key={id}>
-                    <th>Net</th>
-                    <th>VAT</th>
-                    <th>Gross</th>
-                    <th>Gratuity</th>
-                  </React.Fragment>
-                ))}
-              </tr>
-            </thead>
+							<tbody>
+								{days.map((d, i) => {
+									const overall = d.overall || {};
 
-            <tbody>
-              {days.map((d, i) => {
-                const overall = d.overall || {};
+									return (
+										<tr key={i}>
+											<td>{d.date}</td>
+											<td>{d.day}</td>
+											<td>{d.week || ""}</td>
 
-                return (
-                  <tr key={i}>
-                    <td>{d.date}</td>
-                    <td>{d.day}</td>
-                    <td>{d.week || ""}</td>
+											<td>{money(overall.net)}</td>
+											<td>{money(overall.vat)}</td>
+											<td>{money(overall.gross)}</td>
+											<td>{money(overall.gratuity)}</td>
 
-                    <td>{money(overall.net)}</td>
-                    <td>{money(overall.vat)}</td>
-                    <td>{money(overall.gross)}</td>
-                    <td>{money(overall.gratuity)}</td>
-
-                    {sortedSiteIds.map((id) => {
-                      const s = d.sites?.[id] || {};
-                      return (
-                        <React.Fragment key={id}>
-                          <td>{money(s.net)}</td>
-                          <td>{money(s.vat)}</td>
-                          <td>{money(s.gross)}</td>
-                          <td>{money(s.gratuity)}</td>
-                        </React.Fragment>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-
-          </table>
+											{sortedSiteIds.map((id) => {
+												const s = d.sites?.[id] || {};
+												return (
+													<React.Fragment key={id}>
+														<td>{money(s.net)}</td>
+														<td>{money(s.vat)}</td>
+														<td>{money(s.gross)}</td>
+														<td>{money(s.gratuity)}</td>
+													</React.Fragment>
+												);
+											})}
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
         </div>
-
       </div>
-
     </div>
   );
 }
