@@ -278,7 +278,38 @@ export default function ItemsInterval() {
    * ====================== */
 
   if (loading) {
-    return <div className="sales">Loading...</div>;
+    return (
+      <div className="sales">
+        <div className="header-bar">
+          <div className="skeleton" style={{ width: 160, height: 20 }} />
+          <div className="export-buttons">
+            <div className="skeleton" style={{ width: 110, height: 32 }} />
+            <div className="skeleton" style={{ width: 110, height: 32 }} />
+          </div>
+        </div>
+
+        <div className="table-card">
+          <div
+            className="skeleton"
+            style={{ width: 140, height: 18, marginBottom: 12 }}
+          />
+
+          <table className="table">
+            <tbody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 6 }).map((_, j) => (
+                    <td key={j}>
+                      <div className="skeleton" style={{ height: 12 }} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
   }
 
   return (

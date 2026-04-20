@@ -71,10 +71,10 @@ class ReportService {
 		$user_id       = get_current_user_id();
 
 		foreach ( $all_sites as $s ) {
-			if ( 'all' !== $entity && $entity !== $s->entity_id ) {
+			if ( 'all' !== $entity && (int) $entity !== $s->entity_id ) {
 				continue;
 			}
-			if ( 'all' !== $site && $site !== $s->site_id ) {
+			if ( 'all' !== $site && (int) $site !== (int) $s->site_id ) {
 				continue;
 			}
 
@@ -274,11 +274,11 @@ class ReportService {
 
 		foreach ( $all_sites as $s ) {
 
-			if ( 'all' !== $entity && $entity !== $s->entity_id ) {
+			if ( 'all' !== $entity && (int) $entity !== $s->entity_id ) {
 				continue;
 			}
 
-			if ( 'all' !== $site && $site !== $s->site_id ) {
+			if ( 'all' !== $site && (int) $site !== (int) $s->site_id ) {
 				continue;
 			}
 
@@ -1355,10 +1355,10 @@ class ReportService {
 
 		foreach ( $all_sites as $s ) {
 			// Filter by entity/site
-			if ( 'all' !== $entity && $entity !== $s->entity_id ) {
+			if ( 'all' !== $entity && (int) $entity !== $s->entity_id ) {
 				continue;
 			}
-			if ( 'all' !== $site && $site !== $s->site_id ) {
+			if ( 'all' !== $site && (int) $site !== (int) $s->site_id ) {
 				continue;
 			}
 
@@ -2279,10 +2279,10 @@ class ReportService {
 
 		foreach ( $sites_all as $s ) {
 
-			if ( 'all' !== $entity && $entity !== $s->entity_id ) {
+			if ( 'all' !== $entity && (int) $entity !== $s->entity_id ) {
 				continue;
 			}
-			if ( 'all' !== $site && $site !== $s->site_id ) {
+			if ( 'all' !== $site && (int) $site !== (int) $s->site_id ) {
 				continue;
 			}
 

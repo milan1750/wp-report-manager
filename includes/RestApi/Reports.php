@@ -240,12 +240,12 @@ class Reports {
 		foreach ( $all_sites as $s ) {
 
 			// entity filter.
-			if ( 'all' !== $entity && $entity != $s->entity_id ) {
+			if ( 'all' !== $entity && (int) $entity !== $s->entity_id ) {
 				continue;
 			}
 
 			// site filter.
-			if ( 'all' !== $site && $site != $s->site_id ) {
+			if ( 'all' !== $site && (int) $site !== (int) $s->site_id ) {
 				continue;
 			}
 
@@ -269,7 +269,6 @@ class Reports {
 				)
 			);
 		}
-
 		$ids = implode( ',', array_map( 'intval', $allowed_sites ) );
 
 		// =========================
