@@ -478,6 +478,9 @@ class ReportService {
 		$entity = $request['entity'] ?? 'all';
 		$site   = $request['site'] ?? 'all';
 
+		$categories    = $request['categories'] ?? '';
+		$category_list = array_filter( array_map( 'trim', explode( ',', $categories ) ) );
+
 		// ✅ FIX: use local time, not UTC
 		$a = $request['interval_a'] ?? gmdate( 'Y-m-d' );
 		$b = $request['interval_b'] ?? gmdate( 'Y-m-d' );
@@ -524,7 +527,6 @@ class ReportService {
 
 			$allowed_sites[] = (int) $s->site_id;
 		}
-		error_log(print_r(	$allowed_sites, true  ));
 
 		if ( empty( $allowed_sites ) ) {
 			return array(
@@ -534,8 +536,19 @@ class ReportService {
 			);
 		}
 
+		$category_sql = '';
+
+		if ( ! empty( $category_list ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $category_list ), '%s' ) );
+
+				$category_sql = $wpdb->prepare(
+					" AND category_name IN ($placeholders) ",
+					...$category_list
+				);
+		}
+
 		$ids         = implode( ',', array_map( 'intval', $allowed_sites ) );
-		$where_sites = " AND site_id IN ($ids) AND voided != 1";
+		$where_sites = " AND site_id IN ($ids) AND voided != 1 $category_sql";
 
 		/*
 		=========================
@@ -544,21 +557,20 @@ class ReportService {
 		*/
 
 		$sql = "
-		SELECT
-			item_title,
-			FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(added_datetime)/%d)*%d) AS bucket,
-			SUM(quantity) AS qty
-		FROM $t
-		WHERE added_datetime BETWEEN %s AND %s
-		$where_sites
-		GROUP BY item_title, bucket
-	";
+			SELECT
+				item_title,
+				FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(added_datetime)/%d)*%d) AS bucket,
+				SUM(quantity) AS qty
+			FROM $t
+			WHERE added_datetime BETWEEN %s AND %s
+			$where_sites
+			GROUP BY item_title, bucket
+		";
 
 		$this_rows = $wpdb->get_results(
 			$wpdb->prepare( $sql, $seconds, $seconds, $from, $to ),
 			ARRAY_A
 		);
-		error_log(print_r(	$this_rows, true  ));
 
 		$last_rows = array();
 
@@ -688,6 +700,9 @@ class ReportService {
 		$entity = $request['entity'] ?? 'all';
 		$site   = $request['site'] ?? 'all';
 
+		$categories    = $request['categories'] ?? '';
+		$category_list = array_filter( array_map( 'trim', explode( ',', $categories ) ) );
+
 		$a = $request['interval_a'] ?? gmdate( 'Y-m-d' );
 		$b = $request['interval_b'] ?? gmdate( 'Y-m-d' );
 
@@ -751,8 +766,19 @@ class ReportService {
 
 		uasort( $site_name_map, fn( $a, $b ) => strcasecmp( $a, $b ) );
 
+		$category_sql = '';
+
+		if ( ! empty( $category_list ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $category_list ), '%s' ) );
+
+				$category_sql = $wpdb->prepare(
+					" AND category_name IN ($placeholders) ",
+					...$category_list
+				);
+		}
+
 		$ids   = implode( ',', array_map( 'intval', $allowed_sites ) );
-		$where = " AND site_id IN ($ids) AND voided != 1";
+		$where = " AND site_id IN ($ids) AND voided != 1 $category_sql";
 
 		/*
 		=========================
@@ -1027,6 +1053,9 @@ class ReportService {
 		$entity = $request['entity'] ?? 'all';
 		$site   = $request['site'] ?? 'all';
 
+		$categories    = $request['categories'] ?? '';
+		$category_list = array_filter( array_map( 'trim', explode( ',', $categories ) ) );
+
 		$a = $request['interval_a'] ?? gmdate( 'Y-m-d' );
 		$b = $request['interval_b'] ?? gmdate( 'Y-m-d' );
 
@@ -1089,8 +1118,19 @@ class ReportService {
 			exit;
 		}
 
+		$category_sql = '';
+
+		if ( ! empty( $category_list ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $category_list ), '%s' ) );
+
+				$category_sql = $wpdb->prepare(
+					" AND category_name IN ($placeholders) ",
+					...$category_list
+				);
+		}
+
 		$ids   = implode( ',', array_map( 'intval', $allowed_sites ) );
-		$where = " AND site_id IN ($ids) AND voided != 1";
+		$where = " AND site_id IN ($ids) AND voided != 1 $category_sql";
 
 		/*
 		=========================
@@ -1098,14 +1138,14 @@ class ReportService {
 		========================= */
 
 		$sql = "
-		SELECT item_title,
-		FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(added_datetime)/%d)*%d) AS bucket,
-		SUM(quantity) AS qty
-		FROM $t
-		WHERE added_datetime BETWEEN %s AND %s
-		$where
-		GROUP BY item_title, bucket
-	";
+			SELECT item_title,
+			FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(added_datetime)/%d)*%d) AS bucket,
+			SUM(quantity) AS qty
+			FROM $t
+			WHERE added_datetime BETWEEN %s AND %s
+			$where
+			GROUP BY item_title, bucket
+		";
 
 		$this_rows = $wpdb->get_results(
 			$wpdb->prepare( $sql, $seconds, $seconds, $from, $to ),
@@ -1187,50 +1227,49 @@ class ReportService {
 		========================= */
 
 		$html = "
-	<html>
-	<head>
-	<style>
-		body { font-family: Arial; font-size: 11px; }
-		h2 { text-align:center; margin-bottom: 5px; }
-		.blank { height: 10px; }
+			<html>
+			<head>
+			<style>
+				body { font-family: Arial; font-size: 11px; }
+				h2 { text-align:center; margin-bottom: 5px; }
+				.blank { height: 10px; }
 
-		table {
-			width: 100%;
-			border-collapse: collapse;
-		}
+				table {
+					width: 100%;
+					border-collapse: collapse;
+				}
 
-		th, td {
-			border: 1px solid #000;
-			padding: 4px;
-			text-align: center;
-		}
+				th, td {
+					border: 1px solid #000;
+					padding: 4px;
+					text-align: center;
+				}
 
-		th {
-			background: #f2f2f2;
-		}
+				th {
+					background: #f2f2f2;
+				}
 
-		td.item {
-			text-align: left;
-		}
-	</style>
-	</head>
-	<body>
+				td.item {
+					text-align: left;
+				}
+			</style>
+			</head>
+			<body>
 
-	<h2>{$title}</h2>
-	<div class='blank'></div>
+			<h2>{$title}</h2>
+			<div class='blank'></div>
 
-	<table>
-	<tr>
-		<th>Item</th>";
-
+			<table>
+			<tr>
+				<th>Item</th>";
 		foreach ( $slots as $slot => $_ ) {
 			$html .= "<th colspan='" . ( $is_same ? 1 : 2 ) . "'>$slot</th>";
 		}
 
-		$html .= "<th colspan='" . ( $is_same ? 1 : 2 ) . "'>Total</th></tr>";
+				$html .= "<th colspan='" . ( $is_same ? 1 : 2 ) . "'>Total</th></tr>";
 
-		/* sub header */
-		$html .= '<tr><th></th>';
+				/* sub header */
+				$html .= '<tr><th></th>';
 
 		foreach ( $slots as $_ ) {
 			if ( $is_same ) {
@@ -1245,10 +1284,9 @@ class ReportService {
 		} else {
 			$html .= '<th>T</th><th>L</th>';
 		}
+			$html .= '</tr>';
 
-		$html .= '</tr>';
-
-		/* rows */
+			/* rows */
 		foreach ( $items as $item ) {
 
 			$html .= "<tr><td class='item'>{$item['item']}</td>";
@@ -1274,23 +1312,23 @@ class ReportService {
 			$html .= '</tr>';
 		}
 
-		$html .= '</table></body></html>';
+			$html .= '</table></body></html>';
 
-		/*
-		=========================
-		DOMPDF RENDER
-		========================= */
+			/*
+			=========================
+			DOMPDF RENDER
+			========================= */
 
-		$options = new Options();
-		$options->set( 'isRemoteEnabled', true );
+			$options = new Options();
+			$options->set( 'isRemoteEnabled', true );
 
-		$dompdf = new Dompdf( $options );
-		$dompdf->loadHtml( $html );
-		$dompdf->setPaper( 'A4', 'landscape' );
-		$dompdf->render();
+			$dompdf = new Dompdf( $options );
+			$dompdf->loadHtml( $html );
+			$dompdf->setPaper( 'A4', 'landscape' );
+			$dompdf->render();
 
-		$dompdf->stream( 'items_interval.pdf', array( 'Attachment' => true ) );
-		exit;
+			$dompdf->stream( 'items_interval.pdf', array( 'Attachment' => true ) );
+			exit;
 	}
 
 	/**

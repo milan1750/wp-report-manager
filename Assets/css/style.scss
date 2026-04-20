@@ -782,3 +782,127 @@ body {
     }
   }
 }
+
+/* ================================
+   CATEGORY DROPDOWN (UPDATED UI)
+================================ */
+
+.category-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+/* trigger button already uses .btn styles */
+
+/* PANEL */
+.dropdown-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+
+  width: 260px;
+  max-height: 300px;
+  overflow-y: auto;
+
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+
+  z-index: 99999;
+
+  padding: var(--space-2);
+}
+
+/* HEADER */
+.dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 6px 8px;
+  margin-bottom: 6px;
+
+  border-bottom: 1px solid var(--border);
+}
+
+.dropdown-header strong {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text);
+}
+
+/* CLEAR BUTTON */
+.link-btn {
+  background: transparent;
+  border: none;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--primary);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition: 0.15s ease;
+}
+
+.link-btn:hover {
+  background: var(--bg-soft);
+  color: var(--primary-hover);
+}
+
+/* LIST */
+.dropdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+}
+
+/* ITEM */
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+
+  font-size: var(--text-sm);
+  cursor: pointer;
+
+  transition: 0.15s ease;
+}
+
+/* hover like filters options */
+.dropdown-item:hover {
+  background: var(--bg-soft);
+}
+
+/* checkbox + label alignment */
+.dropdown-item input {
+  margin-right: 8px;
+  accent-color: var(--primary);
+}
+
+/* text */
+.dropdown-item span {
+  flex: 1;
+  color: var(--text);
+}
+
+/* count */
+.dropdown-item small {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* OPTIONAL: checked state highlight */
+.dropdown-item:has(input:checked) {
+  background: #eef5ff;
+}
+
+.dropdown-item:has(input:checked) span {
+  color: var(--primary);
+  font-weight: var(--font-medium);
+}

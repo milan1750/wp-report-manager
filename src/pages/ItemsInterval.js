@@ -1,27 +1,85 @@
 import { useContext, useEffect, useState, useMemo } from "@wordpress/element";
 import { FilterContext } from "../contexts";
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
-const num = (v) => Number(v || 0);
+/**
+ * Utility helpers
+ */
+const toNumber = (v) => Number(v || 0);
+const toFloat = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+/**
+ * Generic file download helper
+ */
+const downloadFile = (blob, filename) => {
+  const url = window.URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  window.URL.revokeObjectURL(url);
+};
 
 export default function ItemsInterval() {
   const { filters, setFilters } = useContext(FilterContext);
 
-  const [data, setData] = useState(null);
+  /** ========================
+   * STATE
+   * ====================== */
+  const [data, setData] = useState({ slots: [], items: [] });
   const [loading, setLoading] = useState(true);
-  const [exportingExcel, setExportingExcel] = useState(false);
-  const [exportingPDF, setExportingPDF] = useState(false);
-  /* INIT */
+
+  const [exporting, setExporting] = useState({
+    excel: false,
+    pdf: false,
+  });
+
+  // Category handling (UI vs applied state separation)
+  const [categories, setCategories] = useState([]);
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [appliedCategories, setAppliedCategories] = useState([]);
+
+  const [catOpen, setCatOpen] = useState(false);
+
+  /** ========================
+   * EFFECTS
+   * ====================== */
+
+  /**
+   * Reset category selection when entity/site changes
+   */
+  useEffect(() => {
+    setSelectedCategories([]);
+    setAppliedCategories([]);
+  }, [filters.entity, filters.site]);
+
+  /**
+   * Close dropdown when clicking outside
+   */
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest(".category-dropdown")) {
+        setCatOpen(false);
+      }
+    };
+
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
+
+  /**
+   * Initialize default filter state (only once or when invalid)
+   */
   useEffect(() => {
     setFilters((prev) => {
       const today = new Date().toISOString().split("T")[0];
 
-      const alreadyCorrect =
-        prev.mode === "interval" && prev.interval_a && prev.interval_b;
-
-      if (alreadyCorrect) return prev;
+      if (prev.mode === "interval" && prev.interval_a && prev.interval_b) {
+        return prev;
+      }
 
       return {
         ...prev,
@@ -35,9 +93,12 @@ export default function ItemsInterval() {
     });
   }, [setFilters]);
 
-  /* PARAMS */
+  /**
+   * Build API query params
+   * Only appliedCategories should trigger data fetch
+   */
   const params = useMemo(() => {
-    return new URLSearchParams({
+    const p = new URLSearchParams({
       interval: filters.interval || 60,
       entity: filters.entity || "all",
       site: filters.site || "all",
@@ -46,240 +107,271 @@ export default function ItemsInterval() {
       interval_a_preset: filters.interval_a_preset || "",
       interval_b_preset: filters.interval_b_preset || "",
     });
-  }, [filters]);
 
-  /* FETCH */
+    if (appliedCategories.length) {
+      p.append("categories", appliedCategories.join(","));
+    }
+
+    return p;
+  }, [filters, appliedCategories]);
+
+  /**
+   * Fetch category list
+   */
+  useEffect(() => {
+    const api = window.WRM_API;
+    if (!api?.url) return;
+
+    const query = new URLSearchParams({
+      entity: filters.entity || "all",
+      site: filters.site || "all",
+    });
+
+    fetch(`${api.url}reports/item-categories?${query}`, {
+      headers: { "X-WP-Nonce": api.nonce },
+    })
+      .then((res) => res.json())
+      .then((res) => setCategories(res?.data || []))
+      .catch(() => setCategories([]));
+  }, [filters.entity, filters.site]);
+
+  /**
+   * Fetch main report data
+   */
   useEffect(() => {
     const api = window.WRM_API;
     if (!api?.url) return;
 
     setLoading(true);
 
-    fetch(`${api.url}reports/items-interval?${params.toString()}`, {
+    fetch(`${api.url}reports/items-interval?${params}`, {
       headers: { "X-WP-Nonce": api.nonce },
     })
       .then((res) => res.json())
-      .then((d) => setData(d || { slots: [], items: [] }))
+      .then((res) => setData(res || { slots: [], items: [] }))
+      .catch(() => setData({ slots: [], items: [] }))
       .finally(() => setLoading(false));
   }, [params]);
 
-  /* SAFE DATA */
-  const slots = data?.slots || [];
-  const itemsRaw = data?.items || [];
+  /** ========================
+   * DERIVED DATA
+   * ====================== */
 
-  /* TOTALS PER ITEM */
+  const slots = data.slots || [];
+  const itemsRaw = data.items || [];
+
+  /**
+   * Calculate totals per item
+   */
   const itemsWithTotals = useMemo(() => {
     return itemsRaw.map((item) => {
       let thisTotal = 0;
       let lastTotal = 0;
 
       slots.forEach((slot) => {
-        const s = item.slots?.[slot] || { this: 0, last: 0 };
-
-        thisTotal = Math.round((thisTotal + num(s.this)) * 1000) / 1000;
-        lastTotal = Math.round((lastTotal + num(s.last)) * 1000) / 1000;
+        const s = item.slots?.[slot] || {};
+        thisTotal += toNumber(s.this);
+        lastTotal += toNumber(s.last);
       });
 
-      return { ...item, thisTotal, lastTotal };
+      return {
+        ...item,
+        thisTotal: toFloat(thisTotal),
+        lastTotal: toFloat(lastTotal),
+      };
     });
   }, [itemsRaw, slots]);
 
+  /**
+   * Sort items by current total descending
+   */
   const sortedItems = useMemo(() => {
     return [...itemsWithTotals].sort((a, b) => b.thisTotal - a.thisTotal);
   }, [itemsWithTotals]);
 
-  /* COLUMN TOTALS */
+  /**
+   * Column totals
+   */
   const columnTotals = useMemo(() => {
     const totals = {};
 
     slots.forEach((slot) => {
-      totals[slot] = { this: 0, last: 0 };
+      let thisSum = 0;
+      let lastSum = 0;
 
       itemsWithTotals.forEach((item) => {
-        const s = item.slots?.[slot] || { this: 0, last: 0 };
-
-        totals[slot].this =
-          Math.round((totals[slot].this + num(s.this)) * 100) / 100;
-
-        totals[slot].last =
-          Math.round((totals[slot].last + num(s.last)) * 100) / 100;
+        const s = item.slots?.[slot] || {};
+        thisSum += toNumber(s.this);
+        lastSum += toNumber(s.last);
       });
+
+      totals[slot] = {
+        this: toFloat(thisSum),
+        last: toFloat(lastSum),
+      };
     });
 
     return totals;
   }, [itemsWithTotals, slots]);
 
-  const round2 = (v) => Math.round((v || 0) * 100) / 100;
-
-  const grandThis = round2(
-    itemsWithTotals.reduce((a, i) => a + i.thisTotal, 0),
+  const grandThis = useMemo(
+    () =>
+      toFloat(
+        itemsWithTotals.reduce((sum, i) => sum + toNumber(i.thisTotal), 0),
+      ),
+    [itemsWithTotals],
   );
 
-  const grandLast = round2(
-    itemsWithTotals.reduce((a, i) => a + i.lastTotal, 0),
+  const grandLast = useMemo(
+    () =>
+      toFloat(
+        itemsWithTotals.reduce((sum, i) => sum + toNumber(i.lastTotal), 0),
+      ),
+    [itemsWithTotals],
   );
 
-  const isSameDay =
-    filters.interval_a &&
-    filters.interval_b &&
-    filters.interval_a === filters.interval_b;
+  const isSameDay = filters.interval_a === filters.interval_b;
 
-  /* EXPORT EXCEL */
-  const exportExcel = async () => {
+  /** ========================
+   * EXPORT HANDLERS
+   * ====================== */
+
+  const exportFile = async (type) => {
     const api = window.WRM_API;
     if (!api?.url) return;
 
-    setExportingExcel(true);
+    setExporting((prev) => ({ ...prev, [type]: true }));
 
     try {
-      const params = new URLSearchParams({
-        interval: filters.interval || 60,
-        entity: filters.entity || "all",
-        site: filters.site || "all",
-        interval_a: filters.interval_a || "",
-        interval_b: filters.interval_b || "",
+      const query = new URLSearchParams({
+        ...filters,
       });
 
+      if (selectedCategories.length) {
+        query.append("categories", selectedCategories.join(","));
+      }
+
+      const endpoint = type === "excel" ? "excel-download" : "pdf-download";
+
       const res = await fetch(
-        `${api.url}reports/items-interval/excel-download?${params.toString()}`,
+        `${api.url}reports/items-interval/${endpoint}?${query}`,
         {
           headers: { "X-WP-Nonce": api.nonce },
         },
       );
 
+      if (!res.ok) throw new Error(`${type} export failed`);
+
       const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
 
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "items-interval-report.xlsx";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
-      window.URL.revokeObjectURL(url);
-    } finally {
-      setExportingExcel(false);
-    }
-  };
-
-  /* EXPORT PDF */
-  const exportPDF = async () => {
-    const api = window.WRM_API;
-    if (!api?.url) return;
-
-    setExportingPDF(true);
-
-    try {
-      const params = new URLSearchParams({
-        interval: filters.interval || 60,
-        entity: filters.entity || "all",
-        site: filters.site || "all",
-        interval_a: filters.interval_a || "",
-        interval_b: filters.interval_b || "",
-        interval_a_preset: filters.interval_a_preset || "",
-        interval_b_preset: filters.interval_b_preset || "",
-      });
-
-      const res = await fetch(
-        `${api.url}reports/items-interval/pdf-download?${params.toString()}`,
-        {
-          headers: { "X-WP-Nonce": api.nonce },
-        },
+      downloadFile(
+        blob,
+        `items-interval-report.${type === "excel" ? "xlsx" : "pdf"}`,
       );
-
-      if (!res.ok) throw new Error("PDF export failed");
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "items-interval-report.pdf";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
-      window.URL.revokeObjectURL(url);
     } finally {
-      setExportingPDF(false);
+      setExporting((prev) => ({ ...prev, [type]: false }));
     }
   };
 
-  /* LOADING */
+  /** ========================
+   * RENDER
+   * ====================== */
+
   if (loading) {
-    return (
-      <div className="sales">
-        <div className="header-bar">
-          <div className="skeleton" style={{ width: 160, height: 20 }} />
-          <div className="export-buttons">
-            <div className="skeleton" style={{ width: 110, height: 32 }} />
-            <div className="skeleton" style={{ width: 110, height: 32 }} />
-          </div>
-        </div>
-
-        <div className="table-card">
-          <div
-            className="skeleton"
-            style={{ width: 140, height: 18, marginBottom: 12 }}
-          />
-
-          <table className="table">
-            <tbody>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
-                    <td key={j}>
-                      <div className="skeleton" style={{ height: 12 }} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-  if (!sortedItems.length) {
-    return (
-      <div className="sales">
-        <div className="table-card empty">
-          <h2>No Interval Data</h2>
-          <p>Please select the correct date.</p>
-        </div>
-      </div>
-    );
+    return <div className="sales">Loading...</div>;
   }
 
-  /* UI */
   return (
     <div className="item-interval">
       <div className="header-bar">
         <h1>Item Sales Report</h1>
 
         <div className="export-buttons">
-          <button
-            className="btn btn-primary"
-            onClick={exportExcel}
-            disabled={exportingExcel}
-          >
-            {exportingExcel ? "Exporting Excel..." : "Export Excel"}
-          </button>
+          <div className="category-dropdown">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setCatOpen((v) => !v)}
+            >
+              {selectedCategories.length
+                ? `${selectedCategories.length} Categories Selected`
+                : "Select Categories"}
+            </button>
 
-          <button
-            className="btn btn-secondary"
-            onClick={exportPDF}
-            disabled={exportingPDF}
-          >
-            {exportingPDF ? "Generating PDF..." : "Export PDF"}
-          </button>
+            {catOpen && (
+              <div className="dropdown-panel">
+                <div className="dropdown-header">
+                  <strong>Categories</strong>
+
+                  <div>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setAppliedCategories(selectedCategories);
+                        setCatOpen(false);
+                      }}
+                    >
+                      Apply
+                    </button>
+                    &nbsp;
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => setSelectedCategories([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="dropdown-list">
+                  {categories.map((cat) => {
+                    const checked = selectedCategories.includes(cat.name);
+
+                    return (
+                      <label key={cat.name} className="dropdown-item">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedCategories((prev) =>
+                              checked
+                                ? prev.filter((c) => c !== cat.name)
+                                : [...prev, cat.name],
+                            );
+                          }}
+                        />
+                        <span>{cat.name}</span>
+                        <small>({cat.count})</small>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          <div>
+            <button
+              className="btn btn-primary"
+              onClick={() => exportFile("excel")}
+              disabled={exporting.excel}
+            >
+              {exporting.excel ? "Exporting..." : "Export Excel"}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => exportFile("pdf")}
+              disabled={exporting.pdf}
+            >
+              {exporting.pdf ? "Generating..." : "Export PDF"}
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="table-card">
         <div className="table-scroll">
-          <table className="table ">
+          <table className="table">
             <thead>
               <tr>
                 <th>Item</th>
@@ -301,16 +393,16 @@ export default function ItemsInterval() {
                   <td>{item.item_title}</td>
 
                   {slots.map((slot) => {
-                    const s = item.slots?.[slot] || { this: 0, last: 0 };
+                    const s = item.slots?.[slot] || {};
 
                     return (
                       <td key={slot}>
                         {isSameDay ? (
-                          <b>{num(s.this)}</b>
+                          <b>{toNumber(s.this)}</b>
                         ) : (
                           <>
-                            <b>{num(s.this)}</b>
-                            <span className="muted"> / {num(s.last)}</span>
+                            <b>{toNumber(s.this)}</b>
+                            <span className="muted"> / {toNumber(s.last)}</span>
                           </>
                         )}
                       </td>

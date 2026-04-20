@@ -144,6 +144,17 @@ class Reports {
 		// Items REPORT.
 		register_rest_route(
 			$ns,
+			'/reports/item-categories',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( self::class, 'item_categories' ),
+				'permission_callback' => function ( $request ) {
+					return self::permission_check( $request, 'wrm_view_items' );
+				},
+			)
+		);
+		register_rest_route(
+			$ns,
 			'/reports/items',
 			array(
 				'methods'             => 'GET',
@@ -198,6 +209,100 @@ class Reports {
 				'methods'             => 'GET',
 				'callback'            => array( ReportService::class, 'meta' ),
 				'permission_callback' => array( self::class, 'meta_permissions' ),
+			)
+		);
+	}
+
+	/**
+	 * Item Categories.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param  \WP_REST_Request $request Request.
+	 */
+	public static function item_categories( \WP_REST_Request $request ) {
+
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'wrm_transaction_items';
+
+		$entity = $request['entity'] ?? 'all';
+		$site   = $request['site'] ?? 'all';
+
+		// =========================
+		// LOAD ENTITIES & SITES
+		// =========================
+		$all_sites   = wpac()->sites()->all();
+		$permissions = wpac()->permissions();
+
+		$allowed_sites = array();
+
+		foreach ( $all_sites as $s ) {
+
+			// entity filter.
+			if ( 'all' !== $entity && $entity != $s->entity_id ) {
+				continue;
+			}
+
+			// site filter.
+			if ( 'all' !== $site && $site != $s->site_id ) {
+				continue;
+			}
+
+			$context = array(
+				'entity_id' => $s->entity_id,
+				'site_id'   => $s->id,
+			);
+
+			if ( ! $permissions->can( 'wrm_view_items', $context ) ) {
+				continue;
+			}
+
+			$allowed_sites[] = (int) $s->site_id;
+		}
+
+		if ( empty( $allowed_sites ) ) {
+			return rest_ensure_response(
+				array(
+					'success' => true,
+					'data'    => array(),
+				)
+			);
+		}
+
+		$ids = implode( ',', array_map( 'intval', $allowed_sites ) );
+
+		// =========================
+		// QUERY (FILTERED)
+		// =========================
+		$sql = "
+		SELECT
+			category_name,
+			COUNT(*) AS items_count
+			FROM {$table}
+			WHERE category_name IS NOT NULL
+				AND category_name != ''
+				AND site_id IN ($ids)
+			GROUP BY category_name
+			ORDER BY category_name ASC
+		";
+
+		$results = $wpdb->get_results( $sql, ARRAY_A );
+
+		$data = array_map(
+			function ( $row ) {
+				return array(
+					'name'  => $row['category_name'],
+					'count' => (int) $row['items_count'],
+				);
+			},
+			$results
+		);
+
+		return rest_ensure_response(
+			array(
+				'success' => true,
+				'data'    => $data,
 			)
 		);
 	}
