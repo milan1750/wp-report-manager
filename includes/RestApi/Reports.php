@@ -40,6 +40,19 @@ class Reports {
 				),
 			)
 		);
+			register_rest_route(
+				$ns,
+				'/reports/bi/transactions',
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( self::class, 'transactions_download_bi' ),
+					'permission_callback' => array( self::class, 'validate_api_key' ),
+					'args'                => array(
+						'from' => array( 'required' => true ),
+						'to'   => array( 'required' => true ),
+					),
+				)
+			);
 
 		// DASHBOARD.
 		register_rest_route(
@@ -286,7 +299,7 @@ class Reports {
 			ORDER BY category_name ASC
 		";
 
-		$results = $wpdb->get_results( $sql, ARRAY_A );
+		$results = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore
 
 		$data = array_map(
 			function ( $row ) {
@@ -445,19 +458,19 @@ class Reports {
 		// SQL QUERY
 		// ======================
 		$sql = "
-		SELECT
-			DATE(complete_datetime) AS date,
-			site_id,
-			COUNT(*) AS orders,
-			SUM(subtotal - discounts) AS net,
-			SUM(tax) AS vat,
-			SUM(total) AS gross,
-			SUM(gratuity) AS gratuity
-		FROM {$table}
-		{$where}
-		GROUP BY DATE(complete_datetime), site_id
-		ORDER BY date ASC
-	";
+			SELECT
+				DATE(complete_datetime) AS date,
+				site_id,
+				COUNT(*) AS orders,
+				SUM(subtotal - discounts) AS net,
+				SUM(tax) AS vat,
+				SUM(total) AS gross,
+				SUM(gratuity) AS gratuity
+			FROM {$table}
+			{$where}
+			GROUP BY DATE(complete_datetime), site_id
+			ORDER BY date ASC
+		";
 
 		$query = $wpdb->prepare( $sql, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$rows  = $wpdb->get_results( $query, ARRAY_A );  // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -539,6 +552,186 @@ class Reports {
 		// JSON OUTPUT (Power BI FRIENDLY)
 		// ======================
 		return rest_ensure_response( $ordered_rows );
+	}
+
+	/**
+	 * BI Transactions API (Power BI / Tableau / Excel).
+	 *
+	 * Returns ALL transaction columns except `id`.
+	 *
+	 * @param  \WP_REST_Request $request Request.
+	 *
+	 * @since 1.0.0
+	 */
+	public static function transactions_download_bi( \WP_REST_Request $request ) {
+
+		self::track_api_hit();
+
+		global $wpdb;
+
+		// ======================
+		// API KEY CHECK
+		// ======================
+		$api_key   = sanitize_text_field( $request->get_param( 'api_key' ) );
+		$saved_key = get_option( 'wrm_bi_api_key' );
+
+		if ( empty( $api_key ) || $api_key !== $saved_key ) {
+			return new \WP_Error(
+				'invalid_api_key',
+				'Invalid API Key',
+				array( 'status' => 403 )
+			);
+		}
+
+		// ======================
+		// INPUTS
+		// ======================
+		$from   = sanitize_text_field( $request->get_param( 'from' ) );
+		$to     = sanitize_text_field( $request->get_param( 'to' ) );
+		$site   = sanitize_text_field( $request->get_param( 'site' ) ?? 'all' );
+		$format = strtolower( sanitize_text_field( $request->get_param( 'format' ) ?? 'json' ) );
+
+		if ( empty( $from ) || empty( $to ) ) {
+			return new \WP_Error(
+				'missing_dates',
+				'from and to are required',
+				array( 'status' => 400 )
+			);
+		}
+
+		// ======================
+		// LOAD SITES + BUILD NAME MAP (LIKE sales())
+		// ======================
+		$entities  = wpac()->entities()->all();
+		$all_sites = wpac()->sites()->all();
+
+		$entity_map = array();
+		foreach ( $entities as $e ) {
+			$entity_map[ $e->id ] = $e->name;
+		}
+
+		$site_name_map = array();
+
+		foreach ( $all_sites as $s ) {
+
+			$entity_name = $entity_map[ $s->entity_id ] ?? '';
+			$ent_short   = explode( ' ', trim( $entity_name ) )[0] ?? '';
+
+			$site_name_map[ $s->site_id ] = trim(
+				$ent_short . ' ' . ( $s->name ?? $s->site_title ?? '' )
+			);
+		}
+
+		$table = $wpdb->prefix . 'wrm_transactions';
+
+		// ======================
+		// WHERE BUILDER
+		// ======================
+		$where  = 'WHERE complete_datetime BETWEEN %s AND %s AND complete = 1 AND canceled != 1';
+		$params = array(
+			$from . ' 00:00:00',
+			$to . ' 23:59:59',
+		);
+
+		if ( 'all' !== $site ) {
+			$where   .= ' AND site_id = %d';
+			$params[] = (int) $site;
+		}
+
+		// ======================
+		// SQL QUERY (NO ID)
+		// ======================
+		$sql = "
+			SELECT
+				transaction_id,
+				site_id,
+				site_title,
+				complete_datetime,
+				complete_date,
+				complete_time,
+				order_type,
+				channel_id,
+				channel_name,
+				clerk_id,
+				clerk_name,
+				customer_name,
+				eat_in,
+				item_qty,
+				subtotal,
+				discounts,
+				tax,
+				service_charge,
+				total,
+				gratuity,
+				order_ref,
+				order_ref2,
+				table_number,
+				table_covers,
+				complete,
+				canceled,
+				created_at
+			FROM {$table}
+			{$where}
+			ORDER BY complete_datetime ASC
+		";
+
+		$query = $wpdb->prepare( $sql, $params ); //phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$rows  = $wpdb->get_results( $query, ARRAY_A ); //phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		if ( empty( $rows ) ) {
+			return rest_ensure_response( array( 'data' => array() ) );
+		}
+
+		// ======================
+		// TYPE CASTING (Power BI Friendly)
+		// ======================
+		foreach ( $rows as &$row ) {
+			$site_id = (int) $row['site_id'];
+
+			// Use mapped site name (NOT DB column).
+			$row['site_title'] = $site_name_map[ $site_id ]
+				?? ( $row['site_title'] ? $row['site_title'] : 'Site ' . $site_id );
+
+			$row['site_id']        = (int) $row['site_id'];
+			$row['channel_id']     = (int) $row['channel_id'];
+			$row['clerk_id']       = (int) $row['clerk_id'];
+			$row['eat_in']         = (int) $row['eat_in'];
+			$row['item_qty']       = (int) $row['item_qty'];
+			$row['subtotal']       = (float) $row['subtotal'];
+			$row['discounts']      = (float) $row['discounts'];
+			$row['tax']            = (float) $row['tax'];
+			$row['service_charge'] = (float) $row['service_charge'];
+			$row['total']          = (float) $row['total'];
+			$row['gratuity']       = (float) $row['gratuity'];
+			$row['table_covers']   = (int) $row['table_covers'];
+			$row['complete']       = (int) $row['complete'];
+			$row['canceled']       = (int) $row['canceled'];
+		}
+		unset( $row );
+
+		// ======================
+		// CSV OUTPUT
+		// ======================
+		if ( 'csv' === $format ) {
+
+			header( 'Content-Type: text/csv; charset=utf-8' );
+			header( 'Content-Disposition: attachment; filename=transactions_' . gmdate( 'Ymd_His' ) . '.csv' );
+
+			$out = fopen( 'php://output', 'w' );
+
+			fputcsv( $out, array_keys( $rows[0] ) );
+			foreach ( $rows as $row ) {
+				fputcsv( $out, $row );
+			}
+
+			fclose( $out );
+			exit;
+		}
+
+		// ======================
+		// JSON OUTPUT
+		// ======================
+		return rest_ensure_response( $rows );
 	}
 
 	/**

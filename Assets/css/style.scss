@@ -759,27 +759,32 @@ body {
 @media (max-width: 768px) {
   .app {
     flex-direction: column;
+  }
 
-    .sidebar {
-      position: fixed;
-      left: 0;
-      top: 0;
-      height: 100vh;
-      width: 220px;
-      z-index: 1;
-    }
+  .app .sidebar {
+    position: relative; /* remove fixed */
+    width: 100%; /* full width */
+    height: auto; /* no full height */
+    border-right: none;
+    border-bottom: 1px solid var(--border);
 
-    .main {
-      .filters {
-        flex-direction: column;
-        align-items: stretch;
+    display: flex;
+    flex-direction: column;
+  }
 
-        &__dropdown {
-          width: 100%;
-          right: 0;
-        }
-      }
-    }
+  .app .main {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .app .sidebar .nav {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .app .sidebar .nav__button {
+    white-space: nowrap;
   }
 }
 
