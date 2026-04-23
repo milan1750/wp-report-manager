@@ -30,96 +30,116 @@ class Tables {
 
 		// ===== Transactions Table =====
 		$transactions_table = $wpdb->prefix . 'wrm_transactions';
-		$sql                = "CREATE TABLE $transactions_table (
-        id BIGINT(20) NOT NULL AUTO_INCREMENT,
-        transaction_id VARCHAR(150) NOT NULL UNIQUE,
-        site_id INT,
-        site_title VARCHAR(150),
-        complete_datetime DATETIME,
-        complete_date DATE,
-        complete_time TIME,
-        order_type VARCHAR(50),
-        channel_id INT,
-        channel_name VARCHAR(100),
-        clerk_id INT,
-        clerk_name VARCHAR(150),
-        customer_name VARCHAR(150),
-        eat_in TINYINT(1),
-        item_qty INT,
-        subtotal DECIMAL(10,2),
-        discounts DECIMAL(10,2),
-        tax DECIMAL(10,2),
-        service_charge DECIMAL(10,2),
-        total DECIMAL(10,2),
-				gratuity DECIMAL(10,2),
-        order_ref VARCHAR(100),
-        order_ref2 VARCHAR(100),
-        table_number VARCHAR(20),
-        table_covers INT,
-        complete TINYINT(1),
-        canceled TINYINT(1),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY transaction_id_unique (transaction_id),
-        KEY idx_site_id (site_id),
-        KEY idx_complete_datetime (complete_datetime),
-        KEY idx_clerk_id (clerk_id),
-        KEY idx_site_date (site_id, complete_date)
 
-    ) $charset_collate;";
+		$sql = "CREATE TABLE $transactions_table (
+			id BIGINT(20) NOT NULL AUTO_INCREMENT,
+			transaction_id VARCHAR(150) NOT NULL,
+
+			site_id INT,
+			site_title VARCHAR(150),
+
+			-- SINGLE SOURCE OF TRUTH (UTC)
+			complete_timestamp BIGINT UNSIGNED NOT NULL,
+
+			-- OPTIONAL DERIVED FIELDS (for UI only, not logic)
+			complete_datetime DATETIME NULL,
+			complete_date DATE NULL,
+			complete_time TIME NULL,
+
+			order_type VARCHAR(50),
+			channel_id INT,
+			channel_name VARCHAR(100),
+			clerk_id INT,
+			clerk_name VARCHAR(150),
+			customer_name VARCHAR(150),
+
+			eat_in TINYINT(1),
+			item_qty INT,
+
+			subtotal DECIMAL(10,2),
+			discounts DECIMAL(10,2),
+			tax DECIMAL(10,2),
+			service_charge DECIMAL(10,2),
+			total DECIMAL(10,2),
+			gratuity DECIMAL(10,2),
+
+			order_ref VARCHAR(100),
+			order_ref2 VARCHAR(100),
+			table_number VARCHAR(20),
+			table_covers INT,
+
+			complete TINYINT(1),
+			canceled TINYINT(1),
+
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+			PRIMARY KEY (id),
+			UNIQUE KEY transaction_id_unique (transaction_id),
+
+			KEY idx_site_id (site_id),
+			KEY idx_complete_timestamp (complete_timestamp),
+			KEY idx_site_timestamp (site_id, complete_timestamp),
+			KEY idx_clerk_id (clerk_id)
+		) $charset_collate;";
 		dbDelta( $sql );
 
 		// ===== Transaction Items Table =====
 		$items_table = $wpdb->prefix . 'wrm_transaction_items';
-		$sql         = "CREATE TABLE $items_table (
-				id BIGINT(20) NOT NULL AUTO_INCREMENT,
-				transaction_id VARCHAR(150) NOT NULL,
-				item_id VARCHAR(150) NOT NULL,
-				site_id INT,
-				product_id INT,
-				product_title VARCHAR(150),
-				category_id INT,
-				category_name VARCHAR(150),
-				item_title VARCHAR(150),
-				item_type VARCHAR(50),
-				quantity DECIMAL(10,2),
-				price DECIMAL(10,2),
-				tax DECIMAL(10,2),
-				disc_price DECIMAL(10,2),
-				disc_tax DECIMAL(10,2),
-				voided TINYINT(1),
-				sale_type VARCHAR(50),
-				added_datetime DATETIME,
-				promo_id INT,
-				price_level_id INT,
-				tax_id INT,
-				PRIMARY KEY (id),
-				UNIQUE KEY idx_item_id (item_id)
+
+		$sql = "CREATE TABLE $items_table (
+			id BIGINT(20) NOT NULL AUTO_INCREMENT,
+			transaction_id VARCHAR(150) NOT NULL,
+			item_id VARCHAR(150) NOT NULL,
+			site_id INT,
+			product_id INT,
+			product_title VARCHAR(150),
+			category_id INT,
+			category_name VARCHAR(150),
+			item_title VARCHAR(150),
+			item_type VARCHAR(50),
+			quantity DECIMAL(10,2),
+			price DECIMAL(10,2),
+			tax DECIMAL(10,2),
+			disc_price DECIMAL(10,2),
+			disc_tax DECIMAL(10,2),
+			voided TINYINT(1),
+			sale_type VARCHAR(50),
+			added_timestamp BIGINT UNSIGNED NOT NULL,
+			added_datetime DATETIME NULL,
+			promo_id INT,
+			price_level_id INT,
+			tax_id INT,
+			PRIMARY KEY (id),
+			UNIQUE KEY idx_item_id (item_id),
+			KEY idx_added_timestamp (added_timestamp),
+			KEY idx_transaction_id (transaction_id)
 		) $charset_collate;";
 		dbDelta( $sql );
 
 		// ===== Transaction Payments Table =====
 		$payments_table = $wpdb->prefix . 'wrm_transaction_payments';
 		$sql            = "CREATE TABLE $payments_table (
-        id BIGINT(20) NOT NULL AUTO_INCREMENT,
-        transaction_id VARCHAR(150) NOT NULL,
-        site_id INT,
-        payment_type VARCHAR(50),
-        amount DECIMAL(10,2),
-        gratuity DECIMAL(10,2),
-        cashback DECIMAL(10,2),
-        change_amount DECIMAL(10,2),
-        card_scheme VARCHAR(50),
-        last4 VARCHAR(10),
-        auth_code VARCHAR(50),
-        canceled TINYINT(1),
-        payment_datetime DATETIME,
-        payment_id VARCHAR(100),
-        PRIMARY KEY (id),
-        KEY idx_transaction_id (transaction_id),
-        KEY idx_payment_type (payment_type),
-        KEY idx_payments_site_date (site_id, payment_datetime)
-    ) $charset_collate;";
+			id BIGINT(20) NOT NULL AUTO_INCREMENT,
+			transaction_id VARCHAR(150) NOT NULL,
+			site_id INT,
+			payment_type VARCHAR(50),
+			amount DECIMAL(10,2),
+			gratuity DECIMAL(10,2),
+			cashback DECIMAL(10,2),
+			change_amount DECIMAL(10,2),
+			card_scheme VARCHAR(50),
+			last4 VARCHAR(10),
+			auth_code VARCHAR(50),
+			canceled TINYINT(1),
+			payment_timestamp BIGINT UNSIGNED NOT NULL,
+			payment_datetime DATETIME NULL,
+			payment_id VARCHAR(100),
+			PRIMARY KEY (id),
+			KEY idx_transaction_id (transaction_id),
+			KEY idx_payment_timestamp (payment_timestamp),
+			KEY idx_site_timestamp (site_id, payment_timestamp),
+			KEY idx_payment_type (payment_type)
+		) $charset_collate;";
 		dbDelta( $sql );
 
 		// ===== Sites Table =====
