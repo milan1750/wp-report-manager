@@ -40,19 +40,19 @@ class Reports {
 				),
 			)
 		);
-			register_rest_route(
-				$ns,
-				'/reports/bi/transactions',
-				array(
-					'methods'             => 'GET',
-					'callback'            => array( self::class, 'transactions_download_bi' ),
-					'permission_callback' => array( self::class, 'validate_api_key' ),
-					'args'                => array(
-						'from' => array( 'required' => true ),
-						'to'   => array( 'required' => true ),
-					),
-				)
-			);
+		register_rest_route(
+			$ns,
+			'/reports/bi/transactions',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( self::class, 'transactions_download_bi' ),
+				'permission_callback' => array( self::class, 'validate_api_key' ),
+				'args'                => array(
+					'from' => array( 'required' => true ),
+					'to'   => array( 'required' => true ),
+				),
+			)
+		);
 
 		// DASHBOARD.
 		register_rest_route(
@@ -184,6 +184,18 @@ class Reports {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( ReportService::class, 'items_interval' ),
+				'permission_callback' => function ( $request ) {
+					return self::permission_check( $request, 'wrm_view_items' );
+				},
+			)
+		);
+
+			register_rest_route(
+			$ns,
+			'/reports/items-production-plan',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( ReportService::class, 'items_production_plan' ),
 				'permission_callback' => function ( $request ) {
 					return self::permission_check( $request, 'wrm_view_items' );
 				},
